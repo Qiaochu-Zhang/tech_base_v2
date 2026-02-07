@@ -1,0 +1,1024 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>上传&复核（样机）</title>
+  <style>
+    :root{
+      --bg:#0b1220; --text:#e9eefc; --muted:#a8b3d6; --line:rgba(255,255,255,.10);
+      --r:14px; --shadow: 0 10px 30px rgba(0,0,0,.25);
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0; font-family:var(--sans); color:var(--text);
+      background: radial-gradient(1200px 700px at 20% -10%, rgba(88,101,242,.26), transparent 60%),
+                  radial-gradient(900px 600px at 90% 10%, rgba(34,197,94,.18), transparent 55%),
+                  var(--bg);
+    }
+    a{ color:#9ad2ff; text-decoration:none; }
+    a:hover{ text-decoration:underline; }
+
+    .topbar{
+      position:sticky; top:0; z-index:20;
+      backdrop-filter: blur(10px);
+      background: rgba(11,18,32,.70);
+      border-bottom:1px solid var(--line);
+    }
+    .topbar-inner{
+      max-width:1400px; margin:0 auto;
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px 16px; gap:12px;
+    }
+    .brand{ font-weight:850; }
+    .nav{ display:flex; gap:10px; flex-wrap:wrap; }
+    .nav a{
+      padding:8px 10px; border-radius:10px;
+      background:rgba(255,255,255,.05);
+      border:1px solid rgba(255,255,255,.07);
+      color:var(--text); font-size:14px;
+    }
+
+    .container{ max-width:1400px; margin:0 auto; padding:16px; }
+    .grid{ display:grid; grid-template-columns: 1fr 420px; gap:14px; }
+    @media (max-width: 1080px){ .grid{ grid-template-columns: 1fr; } }
+
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border:1px solid var(--line);
+      border-radius: var(--r);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .hd{ padding:12px 14px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    .bd{ padding:12px 14px; }
+    .muted{ color:var(--muted); }
+    .small{ font-size:12px; }
+    .mono{ font-family:var(--mono); }
+
+    label{ display:block; margin:10px 0 6px; color:var(--muted); font-size:12px; }
+    input, select, textarea{
+      width:100%;
+      background:rgba(15,23,48,.9);
+      border:1px solid rgba(255,255,255,.12);
+      color:var(--text);
+      padding:10px;
+      border-radius:12px;
+      font-size:13px;
+      outline:none;
+    }
+    textarea{ min-height:180px; resize:vertical; }
+    input[type="date"]{ padding:9px 10px; }
+    .row{ display:flex; gap:10px; }
+    .row > *{ flex:1; }
+
+    .btn{
+      cursor:pointer;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.14);
+      background:rgba(255,255,255,.06);
+      color:var(--text);
+      font-size:13px;
+      width:100%;
+    }
+    .btn:hover{ background:rgba(255,255,255,.10); }
+    .btn.primary{
+      background:rgba(88,101,242,.25);
+      border-color:rgba(88,101,242,.35);
+    }
+    .btn.danger{
+      background:rgba(248,113,113,.15);
+      border-color:rgba(248,113,113,.25);
+    }
+    .btn:disabled{
+      opacity:.5; cursor:not-allowed;
+    }
+
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      background:rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.10);
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      white-space:nowrap;
+    }
+    .dot{ width:8px; height:8px; border-radius:999px; background:#aaa; }
+    .dot.yellow{ background:#facc15; }
+    .dot.orange{ background:#fb923c; }
+    .dot.red{ background:#f87171; }
+
+    .hint{
+      border:1px solid rgba(255,255,255,.10);
+      background:rgba(0,0,0,.10);
+      padding:10px 12px;
+      border-radius:12px;
+      line-height:1.6;
+    }
+    .warn{
+      border:1px solid rgba(248,113,113,.30);
+      background:rgba(248,113,113,.08);
+      padding:10px 12px;
+      border-radius:12px;
+      display:none;
+      margin-bottom:12px;
+    }
+
+    .chips{ display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+    .chip{
+      background:rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:999px;
+      padding:6px 10px;
+      font-size:12px;
+      cursor:pointer;
+      user-select:none;
+    }
+    .chip.on{ background:rgba(154,210,255,.15); border-color:rgba(154,210,255,.25); }
+    .chip:hover{ background:rgba(255,255,255,.10); }
+
+    table{
+      width:100%; border-collapse:separate; border-spacing:0;
+      border:1px solid rgba(255,255,255,.10);
+      border-radius:12px;
+      overflow:hidden;
+      background:rgba(0,0,0,.10);
+    }
+    th,td{ padding:10px; border-bottom:1px solid rgba(255,255,255,.08); font-size:13px; vertical-align:top; }
+    th{ background:rgba(255,255,255,.06); font-weight:650; white-space:nowrap; }
+    tr:last-child td{ border-bottom:none; }
+
+    .modal{
+      position:fixed; inset:0;
+      background:rgba(0,0,0,.55);
+      display:none;
+      align-items:center; justify-content:center;
+      z-index:50;
+      padding:16px;
+    }
+    .modal .box{
+      width:min(720px, 100%);
+      background:rgba(11,18,32,.96);
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:16px;
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .modal .box .hd{ border-bottom:1px solid rgba(255,255,255,.10); }
+    .modal .box .bd{ padding:14px; }
+    .kvs{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    @media (max-width: 720px){ .kvs{ grid-template-columns:1fr; } }
+
+    .tree{
+      border:1px solid rgba(255,255,255,.10);
+      background:rgba(0,0,0,.10);
+      border-radius:12px;
+      padding:8px;
+      max-height: 260px;
+      overflow:auto;
+    }
+    .tree-row{
+      display:flex; align-items:center; gap:8px;
+      padding:6px 8px; border-radius:10px;
+    }
+    .tree-row:hover{ background:rgba(255,255,255,.06); }
+    .tree-toggle{
+      width:22px; height:22px;
+      display:inline-flex; align-items:center; justify-content:center;
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:8px;
+      background:rgba(255,255,255,.05);
+      cursor:pointer;
+      user-select:none;
+      font-family: var(--mono);
+      font-size:12px;
+    }
+    .tree-toggle.empty{ opacity:.25; cursor:default; }
+    .tree-node{ cursor:pointer; user-select:none; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .tree-node.active{ font-weight:800; color:#bfe6ff; }
+    .tree-indent{ width:16px; flex:0 0 16px; }
+
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">前沿技术情报与预警平台（样机） <span class="muted small">/ 上传 & 复核</span></div>
+      <div class="nav">
+        <a href="index.html">分级汇总表</a>
+        <a href="info_table.html">情报总表</a>
+        <a href="upload_review.html">上传&复核</a>
+        <a href="dashboard.html">技术仪表盘</a>
+        <a href="literature.html">文献检索</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="grid">
+      <!-- LEFT: form -->
+      <div class="card">
+        <div class="hd">
+          <div>
+            <div style="font-weight:850;">上传 / 编辑情报（草稿）</div>
+            <div class="muted small">保存为草稿 → 进入复核区 → 发布后计入统计/预警</div>
+          </div>
+          <div class="pill">
+            <span class="muted small">状态：</span>
+            <span id="statusText">draft</span>
+          </div>
+        </div>
+
+        <div class="bd">
+          <div class="warn" id="warnBox"></div>
+
+          <div class="row">
+            <div>
+              <label>标题 title（必填）</label>
+              <input id="title" placeholder="例如：某公司启动百万吨级CCS项目…" />
+            </div>
+            <div>
+              <label>发布时间 published_at（发布必填）</label>
+              <input id="published_at" type="date" />
+            </div>
+          </div>
+
+          <label>来源 URL source_url（必填）</label>
+          <input id="source_url" placeholder="https://..." />
+
+          <div class="row">
+            <div>
+              <label>来源类型 source_types（多选≥1）</label>
+              <div class="chips" id="sourceTypes"></div>
+            </div>
+            <div>
+              <label>情报类型 info_types（多选≥1）</label>
+              <div class="chips" id="infoTypes"></div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label>密级 classification（必选）</label>
+              <select id="classification">
+                <option value="">请选择</option>
+                <option value="公开">公开</option>
+                <option value="内部">内部</option>
+                <option value="敏感">敏感</option>
+              </select>
+            </div>
+            <div>
+              <label>重要度 importance_score（1-5）</label>
+              <select id="importance_score">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3" selected>3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label>技术新颖度（必选）</label>
+              <select id="tech_novelty">
+                <option value="existing" selected>已有技术</option>
+                <option value="new">新技术（自动触发预警）</option>
+              </select>
+            </div>
+            <div>
+              <label>标签 tags（样机）</label>
+              <input id="tags" placeholder="用逗号分隔：例如 CCUS, 运输, 管网" />
+            </div>
+          </div>
+
+          <label>领域归属（必须落到 4 级）</label>
+          <div class="hint small muted" style="margin-bottom:8px;">
+            点击树节点选择领域；发布时将校验是否为最深层（样机默认要求 level=4）。
+          </div>
+          <div class="pill" style="width:100%; justify-content:space-between;">
+            <span id="domainPathText" class="small">未选择</span>
+            <span id="domainIdText" class="mono small">-</span>
+          </div>
+          <div class="tree" id="domainTree" style="margin-top:10px;"></div>
+
+          <label>正文 content（必填）</label>
+          <textarea id="content" placeholder="粘贴正文/摘要，或写你的分析。"></textarea>
+
+          <div class="row" style="margin-top:12px;">
+            <button class="btn" id="btnSaveDraft">保存草稿（本地）</button>
+            <button class="btn danger" id="btnReset">清空表单</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: review panel -->
+      <div class="card">
+        <div class="hd">
+          <div>
+            <div style="font-weight:850;">复核发布区</div>
+            <div class="muted small">发布前：指标确认 + 预警信息补齐（如触发）</div>
+          </div>
+          <div class="pill"><span class="muted small">情报ID：</span><span id="idText" class="mono">-</span></div>
+        </div>
+
+        <div class="bd">
+          <div class="hint small">
+            <div style="font-weight:800; margin-bottom:6px;">V1 规则提醒</div>
+            <div class="muted">
+              ① 新技术 → 自动触发预警（active）<br/>
+              ② 指标超出范围 → V1 未来可自动触发（样机先不做）<br/>
+              ③ 发布后才进入统计/预警/提醒闭环
+            </div>
+          </div>
+
+          <label style="margin-top:12px;">指标录入（样机）</label>
+          <div class="row">
+            <input id="ind_name" placeholder="指标名称，例如：捕集成本" />
+            <input id="ind_value" placeholder="数值，例如：85" />
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <input id="ind_unit" placeholder="单位，例如：$/tCO₂" />
+            <button class="btn" id="btnAddInd">添加指标</button>
+          </div>
+          <div style="margin-top:10px; overflow:auto;">
+            <table>
+              <thead>
+                <tr><th>指标</th><th>数值</th><th>单位</th><th></th></tr>
+              </thead>
+              <tbody id="indTbody"></tbody>
+            </table>
+          </div>
+
+          <div class="row" style="margin-top:10px;">
+            <button class="btn" id="btnAiSuggest">AI 推荐指标（样机）</button>
+            <button class="btn" id="btnFillDemo">填充一份 CCUS 示例</button>
+          </div>
+
+          <div id="alertBox" style="margin-top:12px; display:none;">
+            <div class="pill" style="justify-content:space-between; width:100%;">
+              <span style="font-weight:750;">预警信息（若触发必须补齐）</span>
+              <span class="pill">
+                <span class="dot" id="alertDot"></span>
+                <span id="alertColorText">-</span>
+              </span>
+            </div>
+
+            <label>预警标题 alert_title（必填）</label>
+            <input id="alert_title" placeholder="例如：新型吸附材料路线出现，需评估规模化可行性" />
+
+            <label>预警内容 alert_body（必填）</label>
+            <textarea id="alert_body" style="min-height:110px;" placeholder="写清：发生了什么、依据是什么、风险点/不确定性。"></textarea>
+
+            <label>复核评论 reviewer_comment（必填）</label>
+            <textarea id="reviewer_comment" style="min-height:110px;" placeholder="必须包含：为什么/影响/建议跟踪点。"></textarea>
+
+            <label>时效 duration（必填）</label>
+            <div class="row">
+              <select id="duration_type">
+                <option value="week">1周</option>
+                <option value="month" selected>1月</option>
+                <option value="year">1年</option>
+                <option value="custom">自定义</option>
+                <option value="permanent">永久</option>
+              </select>
+              <input id="expires_at" type="date" />
+            </div>
+            <div class="muted small" style="margin-top:6px;">
+              样机逻辑：custom 需要填 expires_at；permanent 会忽略 expires_at。
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:12px;">
+            <button class="btn primary" id="btnPublish">复核通过并发布</button>
+            <button class="btn" id="btnPreview">预览（弹窗）</button>
+          </div>
+
+          <div class="muted small" style="margin-top:10px;">
+            * 样机保存位置：localStorage（键：info_items_local / alerts_local）<br/>
+            * 想“真正写入 ./data/json”，需要后端或本地脚本。
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL -->
+  <div class="modal" id="modal">
+    <div class="box">
+      <div class="hd">
+        <div style="font-weight:850;">预览 / 发布结果</div>
+        <div class="pill"><span class="muted small">状态：</span><span id="modalStatus">-</span></div>
+      </div>
+      <div class="bd">
+        <div class="kvs">
+          <div class="hint small">
+            <div class="muted">标题</div>
+            <div id="m_title" style="font-weight:800; margin-top:4px;"></div>
+          </div>
+          <div class="hint small">
+            <div class="muted">领域</div>
+            <div id="m_domain" style="margin-top:4px;"></div>
+          </div>
+          <div class="hint small">
+            <div class="muted">发布时间 / 重要度 / 密级</div>
+            <div id="m_meta" style="margin-top:4px;"></div>
+          </div>
+          <div class="hint small">
+            <div class="muted">来源</div>
+            <div id="m_src" style="margin-top:4px; word-break:break-all;"></div>
+          </div>
+        </div>
+
+        <div class="hint small" style="margin-top:12px;">
+          <div class="muted">正文</div>
+          <div id="m_content" style="margin-top:6px; white-space:pre-wrap;"></div>
+        </div>
+
+        <div class="hint small" style="margin-top:12px;">
+          <div class="muted">指标</div>
+          <div id="m_inds" style="margin-top:6px;"></div>
+        </div>
+
+        <div class="hint small" style="margin-top:12px;" id="m_alert_wrap">
+          <div class="muted">预警</div>
+          <div id="m_alert" style="margin-top:6px;"></div>
+        </div>
+
+        <div class="row" style="margin-top:12px;">
+          <button class="btn" id="btnClose">关闭</button>
+          <button class="btn primary" id="btnGoDetail">查看详情（假跳转）</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+  const $ = s => document.querySelector(s);
+
+  // ---------- utils ----------
+  function todayISO(){
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const day = String(d.getDate()).padStart(2,"0");
+    return `${y}-${m}-${day}`;
+  }
+  function uuidLike(){
+    // simple id for demo
+    return "INFO_" + Math.random().toString(16).slice(2,10).toUpperCase() + "_" + Date.now();
+  }
+  async function loadJson(path){
+    const r = await fetch(path, { cache:"no-store" });
+    if(!r.ok) throw new Error(`加载失败：${path} (${r.status})`);
+    return r.json();
+  }
+
+  function getLocal(key, fallback){
+    try{
+      const s = localStorage.getItem(key);
+      return s ? JSON.parse(s) : fallback;
+    }catch(_){ return fallback; }
+  }
+  function setLocal(key, val){
+    localStorage.setItem(key, JSON.stringify(val, null, 2));
+  }
+
+  function showWarn(msg){
+    const w = $("#warnBox");
+    w.style.display = msg ? "" : "none";
+    w.textContent = msg || "";
+  }
+
+  function pickMulti(chipBoxId, options, initial=[]){
+    const box = $(chipBoxId);
+    const state = new Set(initial);
+    box.innerHTML = "";
+    for(const opt of options){
+      const c = document.createElement("div");
+      c.className = "chip" + (state.has(opt) ? " on" : "");
+      c.textContent = opt;
+      c.addEventListener("click", ()=>{
+        if(state.has(opt)) state.delete(opt);
+        else state.add(opt);
+        c.classList.toggle("on");
+      });
+      box.appendChild(c);
+    }
+    return () => Array.from(state);
+  }
+
+  // ---------- domain tree ----------
+  let domains = [];
+  let domainMap = new Map();
+  const expanded = new Set();
+  let selectedDomainId = null;
+
+  function domainPath(id){
+    const names=[];
+    let cur = domainMap.get(id);
+    while(cur){
+      names.push(cur.name);
+      cur = cur.parent_id ? domainMap.get(cur.parent_id) : null;
+    }
+    return names.reverse().join(" / ");
+  }
+  function buildChildrenIndex(domains){
+    const byParent = new Map();
+    for(const d of domains){
+      if(d.is_active === false) continue;
+      const p = d.parent_id ?? null;
+      if(!byParent.has(p)) byParent.set(p, []);
+      byParent.get(p).push(d);
+    }
+    for(const [p, arr] of byParent.entries()){
+      arr.sort((a,b)=>{
+        const sa = a.sort_order ?? 999, sb = b.sort_order ?? 999;
+        if(sa !== sb) return sa - sb;
+        return (a.name||"").localeCompare(b.name||"");
+      });
+    }
+    return byParent;
+  }
+
+  function renderDomainTree(){
+    const box = $("#domainTree");
+    box.innerHTML = "";
+
+    if(!domains.length){
+      box.innerHTML = `<div class="muted small">未加载 domains.json，无法展示领域树（仍可保存草稿，但发布会校验失败）。</div>`;
+      return;
+    }
+
+    const CHILDREN = buildChildrenIndex(domains);
+    const roots = CHILDREN.get(null) || [];
+
+    function renderNode(node, depth){
+      const row = document.createElement("div");
+      row.className = "tree-row";
+
+      for(let i=0;i<depth;i++){
+        const ind = document.createElement("div");
+        ind.className = "tree-indent";
+        row.appendChild(ind);
+      }
+
+      const kids = CHILDREN.get(node.id) || [];
+      const expandable = kids.length > 0;
+
+      const toggle = document.createElement("div");
+      toggle.className = "tree-toggle" + (expandable ? "" : " empty");
+      toggle.textContent = expandable ? (expanded.has(node.id) ? "−" : "+") : "·";
+      if(expandable){
+        toggle.addEventListener("click", (e)=>{
+          e.stopPropagation();
+          if(expanded.has(node.id)) expanded.delete(node.id);
+          else expanded.add(node.id);
+          renderDomainTree();
+        });
+      }
+      row.appendChild(toggle);
+
+      const label = document.createElement("div");
+      label.className = "tree-node" + (node.id === selectedDomainId ? " active" : "");
+      label.textContent = `L${node.level} · ${node.name}`;
+      label.title = domainPath(node.id);
+      label.addEventListener("click", ()=>{
+        selectedDomainId = node.id;
+        $("#domainPathText").textContent = domainPath(node.id);
+        $("#domainIdText").textContent = node.id;
+        renderDomainTree();
+      });
+      row.appendChild(label);
+
+      box.appendChild(row);
+
+      if(expanded.has(node.id)){
+        for(const child of kids){
+          renderNode(child, depth+1);
+        }
+      }
+    }
+
+    for(const r of roots) renderNode(r, 0);
+  }
+
+  // ---------- indicators ----------
+  let indicators = []; // {name,value,unit}
+  function renderIndicators(){
+    const tb = $("#indTbody");
+    tb.innerHTML = "";
+    if(indicators.length===0){
+      tb.innerHTML = `<tr><td colspan="4" class="muted">暂无指标</td></tr>`;
+      return;
+    }
+    indicators.forEach((it, idx)=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${escapeHtml(it.name)}</td>
+        <td>${escapeHtml(String(it.value))}</td>
+        <td>${escapeHtml(it.unit||"-")}</td>
+        <td><button class="btn danger" data-del="${idx}" style="padding:6px 8px;">删除</button></td>
+      `;
+      tb.appendChild(tr);
+    });
+    tb.querySelectorAll("[data-del]").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        const i = Number(btn.getAttribute("data-del"));
+        indicators.splice(i,1);
+        renderIndicators();
+      });
+    });
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, m => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    }[m]));
+  }
+
+  // ---------- alert logic ----------
+  function importanceToColor(score){
+    const n = Number(score||0);
+    if(n>=5) return "red";
+    if(n===4) return "orange";
+    if(n===3) return "yellow";
+    return null;
+  }
+
+  function syncAlertUI(){
+    const novelty = $("#tech_novelty").value;
+    const score = $("#importance_score").value;
+    const color = importanceToColor(score);
+
+    // trigger if new tech
+    const shouldAlert = novelty === "new";
+    $("#alertBox").style.display = shouldAlert ? "" : "none";
+
+    const dot = $("#alertDot");
+    dot.className = "dot " + (color||"");
+    $("#alertColorText").textContent = color ? `颜色：${color}` : "颜色：-";
+  }
+
+  function computeExpires(){
+    const t = $("#duration_type").value;
+    const published = $("#published_at").value || todayISO();
+    const base = new Date(published + "T00:00:00");
+    if(t==="permanent") return null;
+    if(t==="custom"){
+      const e = $("#expires_at").value;
+      return e ? e : null;
+    }
+    const d = new Date(base);
+    if(t==="week") d.setDate(d.getDate()+7);
+    if(t==="month") d.setMonth(d.getMonth()+1);
+    if(t==="year") d.setFullYear(d.getFullYear()+1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const day = String(d.getDate()).padStart(2,"0");
+    return `${y}-${m}-${day}`;
+  }
+
+  // ---------- collect form ----------
+  const getSourceTypes = pickMulti("#sourceTypes",
+    ["产业新闻","学术文献","行业会议","调研交流","报告发布","政府公文","其他"],
+    ["产业新闻"]
+  );
+  const getInfoTypes = pickMulti("#infoTypes",
+    ["技术","政策","市场","供应链","其他"],
+    ["技术"]
+  );
+
+  function getForm(){
+    return {
+      title: $("#title").value.trim(),
+      published_at: $("#published_at").value,
+      source_url: $("#source_url").value.trim(),
+      source_types: getSourceTypes(),
+      info_types: getInfoTypes(),
+      classification: $("#classification").value,
+      importance_score: Number($("#importance_score").value),
+      tech_novelty: $("#tech_novelty").value, // existing | new
+      tags: $("#tags").value.split(",").map(s=>s.trim()).filter(Boolean),
+      domain_id: selectedDomainId,
+      content: $("#content").value.trim()
+    };
+  }
+
+  function validateForDraft(f){
+    if(!f.title) return "标题必填";
+    if(!f.source_url) return "来源URL必填";
+    if(!f.content) return "正文必填";
+    if(f.source_types.length<1) return "来源类型至少选1个";
+    if(f.info_types.length<1) return "情报类型至少选1个";
+    if(!f.classification) return "密级必选";
+    return null;
+  }
+
+  function validateForPublish(f){
+    const e = validateForDraft(f);
+    if(e) return e;
+    if(!f.published_at) return "发布需要填写发布时间 published_at";
+    if(!f.domain_id) return "发布需要选择领域（必须到4级）";
+    const lvl = domainMap.get(f.domain_id)?.level;
+    if(String(lvl) !== "4") return "发布需要选择 4 级领域（当前不是4级）";
+
+    // if new tech -> alert must be filled
+    if(f.tech_novelty === "new"){
+      if(f.importance_score < 3) return "新技术预警要求重要度至少为3";
+      if(!$("#alert_title").value.trim()) return "预警标题必填";
+      if(!$("#alert_body").value.trim()) return "预警内容必填";
+      if(!$("#reviewer_comment").value.trim()) return "复核评论必填";
+      const dt = $("#duration_type").value;
+      if(dt==="custom" && !$("#expires_at").value) return "自定义时效必须填写 expires_at";
+    }
+    return null;
+  }
+
+  // ---------- local storage persist ----------
+  let currentId = null;
+  function setStatus(s){ $("#statusText").textContent = s; }
+  function setIdText(id){ $("#idText").textContent = id || "-"; }
+
+  function saveDraft(){
+    const f = getForm();
+    const err = validateForDraft(f);
+    if(err){ showWarn(err); return; }
+    showWarn("");
+
+    if(!currentId) currentId = uuidLike();
+    setIdText(currentId);
+
+    const now = new Date().toISOString();
+    const item = {
+      id: currentId,
+      status: "draft",
+      created_at: now,
+      updated_at: now,
+      created_by: "demo_user",
+      reviewed_by: null,
+      ...f,
+      // align with your earlier schema
+      is_new_tech: f.tech_novelty === "new"
+    };
+
+    const items = getLocal("info_items_local", []);
+    const idx = items.findIndex(x=>x.id===currentId);
+    if(idx>=0) items[idx] = item;
+    else items.unshift(item);
+
+    setLocal("info_items_local", items);
+    setStatus("draft");
+
+    openModal("草稿已保存（本地）", item, null);
+  }
+
+  function publish(){
+    const f = getForm();
+    const err = validateForPublish(f);
+    if(err){ showWarn(err); return; }
+    showWarn("");
+
+    if(!currentId) currentId = uuidLike();
+    setIdText(currentId);
+
+    const now = new Date().toISOString();
+    const item = {
+      id: currentId,
+      status: "published",
+      created_at: now,
+      updated_at: now,
+      created_by: "demo_user",
+      reviewed_by: "demo_reviewer",
+      ...f,
+      is_new_tech: f.tech_novelty === "new",
+      has_alert: f.tech_novelty === "new"
+    };
+
+    // save info
+    const items = getLocal("info_items_local", []);
+    const idx = items.findIndex(x=>x.id===currentId);
+    if(idx>=0) items[idx] = item;
+    else items.unshift(item);
+    setLocal("info_items_local", items);
+
+    // save alert if needed
+    let alertObj = null;
+    if(f.tech_novelty === "new"){
+      const color = importanceToColor(item.importance_score) || "yellow";
+      const expires = computeExpires();
+      alertObj = {
+        id: "ALERT_" + currentId,
+        info_item_id: currentId,
+        status: "active",
+        alert_color: color,
+        alert_title: $("#alert_title").value.trim(),
+        alert_body: $("#alert_body").value.trim(),
+        reviewer_comment: $("#reviewer_comment").value.trim(),
+        duration_type: $("#duration_type").value,
+        expires_at: expires,
+        created_at: now,
+        updated_at: now
+      };
+      const alerts = getLocal("alerts_local", []);
+      const j = alerts.findIndex(a=>a.info_item_id===currentId);
+      if(j>=0) alerts[j] = alertObj;
+      else alerts.unshift(alertObj);
+      setLocal("alerts_local", alerts);
+    }
+
+    // save indicators (demo)
+    const indKey = "indicator_values_local";
+    const allInd = getLocal(indKey, []);
+    // remove old
+    const filtered = allInd.filter(v=>v.info_item_id!==currentId);
+    indicators.forEach((x, k)=>{
+      filtered.unshift({
+        id: "INDV_" + currentId + "_" + k,
+        info_item_id: currentId,
+        indicator_def_id: null,
+        indicator_name: x.name,
+        value_number: Number.isFinite(Number(x.value)) ? Number(x.value) : null,
+        value_text: String(x.value),
+        unit: x.unit || null,
+        created_by: "demo_user",
+        created_at: now
+      });
+    });
+    setLocal(indKey, filtered);
+
+    setStatus("published");
+    openModal("发布成功（本地模拟）", item, alertObj);
+  }
+
+  // ---------- modal ----------
+  function openModal(statusText, item, alertObj){
+    $("#modalStatus").textContent = statusText;
+    $("#m_title").textContent = item.title || "-";
+    $("#m_domain").textContent = item.domain_id ? domainPath(item.domain_id) : "-";
+    $("#m_meta").textContent = `${item.published_at || "-"} / 重要度 ${item.importance_score ?? "-"} / ${item.classification || "-"}`;
+    $("#m_src").innerHTML = item.source_url ? `<a href="${escapeHtml(item.source_url)}" target="_blank">${escapeHtml(item.source_url)}</a>` : "-";
+    $("#m_content").textContent = item.content || "-";
+    $("#m_inds").innerHTML = indicators.length
+      ? indicators.map(x=>`<div class="pill" style="margin:4px 6px 0 0; display:inline-flex;">${escapeHtml(x.name)}：${escapeHtml(String(x.value))} ${escapeHtml(x.unit||"")}</div>`).join("")
+      : `<span class="muted">无</span>`;
+
+    const wrap = $("#m_alert_wrap");
+    if(alertObj){
+      wrap.style.display = "";
+      $("#m_alert").innerHTML = `
+        <div class="pill"><span class="dot ${alertObj.alert_color}"></span> ${alertObj.alert_color}</div>
+        <div style="margin-top:8px;"><b>${escapeHtml(alertObj.alert_title)}</b></div>
+        <div class="muted" style="margin-top:6px; white-space:pre-wrap;">${escapeHtml(alertObj.alert_body)}</div>
+        <div class="muted" style="margin-top:6px;">到期：${escapeHtml(alertObj.expires_at || "永久")}</div>
+      `;
+    }else{
+      wrap.style.display = "none";
+    }
+
+    $("#modal").style.display = "flex";
+  }
+
+  $("#btnClose").addEventListener("click", ()=> $("#modal").style.display="none");
+  $("#modal").addEventListener("click", (e)=>{ if(e.target.id==="modal") $("#modal").style.display="none"; });
+  $("#btnGoDetail").addEventListener("click", ()=>{
+    if(!currentId) return;
+    // 假跳转：详情页不一定读 localStorage，但体验上先跳过去
+    location.href = `info_detail.html?id=${encodeURIComponent(currentId)}`;
+  });
+
+  // ---------- demo actions ----------
+  function fillDemo(){
+    $("#title").value = "挪威工业集群推进二氧化碳管网扩容，新增多个接入点";
+    $("#published_at").value = todayISO();
+    $("#source_url").value = "https://example.com/ccus-pipeline-expansion";
+    $("#classification").value = "内部";
+    $("#importance_score").value = "4";
+    $("#tech_novelty").value = "existing";
+    $("#tags").value = "CCUS, 运输, 管网, 集群";
+    $("#content").value =
+`要点：
+- 工业集群计划扩容 CO₂ 管网与压缩站能力，面向未来多点接入（钢铁/水泥/化工）
+- 重点不确定性在于：接入费率机制、长期承诺合同、以及终端封存容量匹配
+
+关注点：
+1) 管网许可与EIA进度
+2) 每吨CO₂运输成本区间与实际负荷率
+3) 与终端封存项目（海上）配套时间表`;
+
+    // pick multi: easiest in demo is let user click; but we can auto-set by recreating chips? keep simple
+    indicators = [
+      { name:"运输成本", value:"12", unit:"$/tCO₂" },
+      { name:"管网能力", value:"2.0", unit:"MtCO₂/年" }
+    ];
+    renderIndicators();
+
+    syncAlertUI();
+    showWarn("");
+  }
+
+  function aiSuggest(){
+    // ultra-simple heuristic: keyword → indicators
+    const txt = ($("#title").value + "\n" + $("#content").value).toLowerCase();
+    const sug = [];
+    if(txt.includes("成本") || txt.includes("cost")) sug.push({name:"捕集成本", value:"", unit:"$/tCO₂"});
+    if(txt.includes("运输") || txt.includes("管网") || txt.includes("pipeline")) sug.push({name:"运输成本", value:"", unit:"$/tCO₂"});
+    if(txt.includes("封存") || txt.includes("storage")) sug.push({name:"封存容量", value:"", unit:"MtCO₂"});
+    if(txt.includes("能耗") || txt.includes("energy")) sug.push({name:"能耗", value:"", unit:"GJ/tCO₂"});
+    if(txt.includes("效率") || txt.includes("efficiency")) sug.push({name:"捕集效率", value:"", unit:"%"});
+
+    if(sug.length===0){
+      showWarn("AI（样机）没有从文本里抓到明显关键词：你可以手动添加指标。");
+      return;
+    }
+    // merge unique by name
+    const existing = new Set(indicators.map(x=>x.name));
+    sug.forEach(x=>{ if(!existing.has(x.name)) indicators.push(x); });
+    renderIndicators();
+    openModal("AI（样机）已添加候选指标（请人工确认数值）", getForm(), null);
+  }
+
+  // ---------- wire UI ----------
+  $("#btnAddInd").addEventListener("click", ()=>{
+    const n = $("#ind_name").value.trim();
+    const v = $("#ind_value").value.trim();
+    const u = $("#ind_unit").value.trim();
+    if(!n || !v){ showWarn("添加指标需要填写名称和数值"); return; }
+    showWarn("");
+    indicators.unshift({ name:n, value:v, unit:u });
+    $("#ind_name").value=""; $("#ind_value").value=""; $("#ind_unit").value="";
+    renderIndicators();
+  });
+
+  $("#btnAiSuggest").addEventListener("click", aiSuggest);
+  $("#btnFillDemo").addEventListener("click", fillDemo);
+
+  $("#tech_novelty").addEventListener("change", syncAlertUI);
+  $("#importance_score").addEventListener("change", syncAlertUI);
+  $("#duration_type").addEventListener("change", ()=>{
+    const t = $("#duration_type").value;
+    if(t==="custom") $("#expires_at").disabled = false;
+    else if(t==="permanent"){ $("#expires_at").disabled = true; $("#expires_at").value=""; }
+    else{ $("#expires_at").disabled = true; $("#expires_at").value=""; }
+  });
+
+  $("#btnSaveDraft").addEventListener("click", saveDraft);
+  $("#btnPublish").addEventListener("click", publish);
+
+  $("#btnPreview").addEventListener("click", ()=>{
+    const f = getForm();
+    openModal("预览（未发布）", { ...f, importance_score: Number(f.importance_score||0) }, null);
+  });
+
+  $("#btnReset").addEventListener("click", ()=>{
+    if(!confirm("确认清空表单？")) return;
+    currentId = null;
+    selectedDomainId = null;
+    setStatus("draft");
+    setIdText(null);
+    $("#title").value="";
+    $("#published_at").value="";
+    $("#source_url").value="";
+    $("#classification").value="";
+    $("#importance_score").value="3";
+    $("#tech_novelty").value="existing";
+    $("#tags").value="";
+    $("#content").value="";
+    $("#domainPathText").textContent="未选择";
+    $("#domainIdText").textContent="-";
+    indicators = [];
+    renderIndicators();
+    syncAlertUI();
+    showWarn("");
+    renderDomainTree();
+  });
+
+  // init
+  (async function init(){
+    $("#published_at").value = todayISO();
+    $("#expires_at").disabled = true;
+    $("#duration_type").value = "month";
+
+    // load domains (optional but recommended)
+    try{
+      domains = await loadJson("./data/domains.json");
+      domainMap = new Map(domains.map(d=>[d.id,d]));
+      // default expand roots
+      domains.filter(d=>d.parent_id==null).forEach(d=>expanded.add(d.id));
+      renderDomainTree();
+    }catch(_){
+      renderDomainTree();
+    }
+
+    renderIndicators();
+    syncAlertUI();
+    setStatus("draft");
+    setIdText(null);
+  })();
+</script>
+</body>
+</html>

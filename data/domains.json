@@ -1,0 +1,47 @@
+[
+  { "id": "DOM_CCUS_L1", "name": "CCUS", "level": 1, "parent_id": null, "is_other": false, "sort_order": 10, "is_active": true },
+
+  { "id": "DOM_CCUS_CAPTURE", "name": "捕集与分离", "level": 2, "parent_id": "DOM_CCUS_L1", "is_other": false, "sort_order": 1, "is_active": true },
+  { "id": "DOM_CCUS_TRANSPORT", "name": "运输与储存", "level": 2, "parent_id": "DOM_CCUS_L1", "is_other": false, "sort_order": 2, "is_active": true },
+
+  { "id": "DOM_CCUS_CAPTURE_SOLID", "name": "固体吸附", "level": 3, "parent_id": "DOM_CCUS_CAPTURE", "is_other": false, "sort_order": 1, "is_active": true },
+  { "id": "DOM_CCUS_TRANSPORT_CLUSTER_L3", "name": "集群与管网", "level": 3, "parent_id": "DOM_CCUS_TRANSPORT", "is_other": false, "sort_order": 1, "is_active": true },
+
+  { "id": "DOM_CCUS_CAPTURE_SOLID_SORBENT", "name": "固体胺/多孔吸附剂", "level": 4, "parent_id": "DOM_CCUS_CAPTURE_SOLID", "is_other": false, "sort_order": 1, "is_active": true },
+  { "id": "DOM_CCUS_TRANSPORT_CLUSTER", "name": "CO₂管网与集中站", "level": 4, "parent_id": "DOM_CCUS_TRANSPORT_CLUSTER_L3", "is_other": false, "sort_order": 1, "is_active": true },
+
+  { "id": "DOM_L1_BATTERY", "name": "电池与储能", "level": 1, "parent_id": null, "sort_order": 20, "is_active": true, "is_other": false },
+  { "id": "DOM_L2_BAT_LIION", "name": "锂电体系", "level": 2, "parent_id": "DOM_L1_BATTERY", "sort_order": 1, "is_active": true, "is_other": false },
+  { "id": "DOM_L3_BAT_SEI", "name": "界面与SEI", "level": 3, "parent_id": "DOM_L2_BAT_LIION", "sort_order": 1, "is_active": true, "is_other": false },
+  { "id": "DOM_L4_BAT_SEI_ADD", "name": "电解液添加剂与成膜", "level": 4, "parent_id": "DOM_L3_BAT_SEI", "sort_order": 1, "is_active": true, "is_other": false },
+  { "id": "DOM_L3_BAT_CATHODE", "name": "正极材料", "level": 3, "parent_id": "DOM_L2_BAT_LIION", "sort_order": 2, "is_active": true, "is_other": false },
+  { "id": "DOM_L4_BAT_CATHODE_LFP", "name": "LFP体系与掺杂包覆", "level": 4, "parent_id": "DOM_L3_BAT_CATHODE", "sort_order": 1, "is_active": true, "is_other": false },
+  { "id": "DOM_L4_BAT_CATHODE_NCM", "name": "高镍NCM与单晶路线", "level": 4, "parent_id": "DOM_L3_BAT_CATHODE", "sort_order": 2, "is_active": true, "is_other": false },
+
+  { "id": "DOM_L2_BAT_SOLID", "name": "固态电池", "level": 2, "parent_id": "DOM_L1_BATTERY", "sort_order": 2, "is_active": true, "is_other": false },
+  { "id": "DOM_L3_SOLID_ELEC", "name": "固态电解质", "level": 3, "parent_id": "DOM_L2_BAT_SOLID", "sort_order": 1, "is_active": true, "is_other": false },
+  { "id": "DOM_L4_SOLID_SULFIDE", "name": "硫化物电解质与界面稳定", "level": 4, "parent_id": "DOM_L3_SOLID_ELEC", "sort_order": 1, "is_active": true, "is_other": false },
+  { "id": "DOM_L4_SOLID_OXIDE", "name": "氧化物电解质与致密化工艺", "level": 4, "parent_id": "DOM_L3_SOLID_ELEC", "sort_order": 2, "is_active": true, "is_other": false },
+
+  { "id": "DOM_L1_H2", "name": "氢能与合成燃料", "level": 1, "parent_id": null, "sort_order": 30, "is_active": true, "is_other": false },
+  { "id": "DOM_L2_H2_ELEC", "name": "电解制氢", "level": 2, "parent_id": "DOM_L1_H2", "sort_order": 1, "is_active": true, "is_other": false },
+  { "id": "DOM_L3_H2_PEM", "name": "PEM电解", "level": 3, "parent_id": "DOM_L2_H2_ELEC", "sort_order": 1, "is_active": true, "is_other": false },
+  { "id": "DOM_L4_H2_PEM_IR", "name": "低铱催化剂与膜电极寿命", "level": 4, "parent_id": "DOM_L3_H2_PEM", "sort_order": 1, "is_active": true, "is_other": false },
+  { "id": "DOM_L3_H2_AEL", "name": "碱性电解(AEL)", "level": 3, "parent_id": "DOM_L2_H2_ELEC", "sort_order": 2, "is_active": true, "is_other": false },
+  { "id": "DOM_L4_H2_AEL_STACK", "name": "大电流密度堆叠与隔膜", "level": 4, "parent_id": "DOM_L3_H2_AEL", "sort_order": 1, "is_active": true, "is_other": false },
+
+  { "id": "DOM_L1_RENEW", "name": "可再生与电力系统", "level": 1, "parent_id": null, "sort_order": 40, "is_active": true, "is_other": false },
+  { "id": "DOM_L2_RENEW_GRID", "name": "电网与储能调度", "level": 2, "parent_id": "DOM_L1_RENEW", "sort_order": 1, "is_active": true, "is_other": false },
+  { "id": "DOM_L3_GRID_FLEX", "name": "灵活性资源与需求响应", "level": 3, "parent_id": "DOM_L2_RENEW_GRID", "sort_order": 1, "is_active": true, "is_other": false },
+  { "id": "DOM_L4_GRID_VPP", "name": "虚拟电厂VPP与聚合控制", "level": 4, "parent_id": "DOM_L3_GRID_FLEX", "sort_order": 1, "is_active": true, "is_other": false },
+
+  { "id": "DOM_L1_MATERIALS", "name": "低碳材料与过程", "level": 1, "parent_id": null, "sort_order": 50, "is_active": true, "is_other": false },
+  { "id": "DOM_L2_MAT_CEMENT", "name": "水泥与建材脱碳", "level": 2, "parent_id": "DOM_L1_MATERIALS", "sort_order": 1, "is_active": true, "is_other": false },
+  { "id": "DOM_L3_CEMENT_ALT", "name": "替代胶凝材料", "level": 3, "parent_id": "DOM_L2_MAT_CEMENT", "sort_order": 1, "is_active": true, "is_other": false },
+  { "id": "DOM_L4_CEMENT_MG", "name": "镁基矿化与CO₂固化建材", "level": 4, "parent_id": "DOM_L3_CEMENT_ALT", "sort_order": 1, "is_active": true, "is_other": false },
+
+  { "id": "DOM_L1_POLICY", "name": "政策与碳市场", "level": 1, "parent_id": null, "sort_order": 60, "is_active": true, "is_other": false },
+  { "id": "DOM_L2_POLICY_MARKET", "name": "碳市场与MRV", "level": 2, "parent_id": "DOM_L1_POLICY", "sort_order": 1, "is_active": true, "is_other": false },
+  { "id": "DOM_L3_MRV", "name": "核算/核证与方法学", "level": 3, "parent_id": "DOM_L2_POLICY_MARKET", "sort_order": 1, "is_active": true, "is_other": false },
+  { "id": "DOM_L4_MRV_CCS", "name": "CCUS项目MRV与信用方法学", "level": 4, "parent_id": "DOM_L3_MRV", "sort_order": 1, "is_active": true, "is_other": false }
+]

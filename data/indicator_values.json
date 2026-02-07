@@ -1,0 +1,32 @@
+[
+  {
+    "id": "VAL_0001",
+    "info_item_id": "INFO_CCUS_0001",
+    "indicator_def_id": "IND_CAPACITY",
+    "value_number": 2.1,
+    "value_text": null,
+    "unit": "mmol_CO2/g",
+    "value_date": "2026-01-03",
+    "created_by": "user_reviewer_01"
+  },
+  {
+    "id": "VAL_0002",
+    "info_item_id": "INFO_CCUS_0001",
+    "indicator_def_id": "IND_REGEN_ENERGY",
+    "value_number": 2.3,
+    "value_text": null,
+    "unit": "GJ/tCO2",
+    "value_date": "2026-01-03",
+    "created_by": "user_reviewer_01"
+  },
+  {
+    "id": "VAL_0003",
+    "info_item_id": "INFO_CCUS_0001",
+    "indicator_def_id": "IND_CYCLE_STABILITY",
+    "value_number": null,
+    "value_text": "≥90% @ 1000 cycles（实验条件）",
+    "unit": null,
+    "value_date": "2026-01-03",
+    "created_by": "user_reviewer_01"
+  }
+]

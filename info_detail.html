@@ -1,0 +1,638 @@
+<!-- info_detail.html
+Static prototype page (no backend). It loads local JSON files from /data and renders:
+- Info header + attributes
+- Domain path (level 1-4)
+- Content
+- Indicator table (joined from indicator_values + indicator_defs)
+- Alert card (joined from alerts)
+
+Run with a local server (e.g., VSCode Live Server) so fetch() works.
+Open: info_detail.html?id=INFO_CCUS_0001
+-->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>情报详情（样机）</title>
+  <style>
+    :root{
+      --bg:#0b1220;
+      --panel:#101a2f;
+      --panel2:#0f1730;
+      --text:#e9eefc;
+      --muted:#a8b3d6;
+      --line:rgba(255,255,255,.09);
+      --chip:rgba(255,255,255,.08);
+      --shadow: 0 10px 30px rgba(0,0,0,.25);
+      --radius:16px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family:var(--sans);
+      background: radial-gradient(1200px 700px at 20% -10%, rgba(88,101,242,.28), transparent 60%),
+                  radial-gradient(900px 600px at 90% 10%, rgba(34,197,94,.20), transparent 55%),
+                  var(--bg);
+      color:var(--text);
+    }
+    a{ color:#9ad2ff; text-decoration:none; }
+    a:hover{ text-decoration:underline; }
+    .topbar{
+      position:sticky; top:0; z-index:10;
+      backdrop-filter: blur(10px);
+      background: rgba(11,18,32,.6);
+      border-bottom:1px solid var(--line);
+    }
+    .topbar-inner{
+      max-width:1100px; margin:0 auto;
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px 16px;
+      gap:12px;
+    }
+    .brand{ font-weight:700; letter-spacing:.2px; }
+    .nav{
+      display:flex; gap:10px; flex-wrap:wrap;
+      align-items:center;
+    }
+    .nav a{
+      padding:8px 10px; border-radius:10px;
+      background:rgba(255,255,255,.04);
+      border:1px solid rgba(255,255,255,.06);
+      color:var(--text);
+      font-size:14px;
+    }
+    .nav a:hover{ background:rgba(255,255,255,.07); }
+    .container{ max-width:1100px; margin:0 auto; padding:18px 16px 60px; }
+    .grid{
+      display:grid;
+      grid-template-columns: 1.3fr .7fr;
+      gap:14px;
+    }
+    @media (max-width: 960px){
+      .grid{ grid-template-columns: 1fr; }
+    }
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border:1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .card .hd{
+      padding:14px 16px;
+      border-bottom:1px solid var(--line);
+      display:flex; align-items:flex-start; justify-content:space-between;
+      gap:12px;
+    }
+    .card .bd{ padding:14px 16px; }
+    .title{
+      font-size:20px; line-height:1.25; margin:0 0 8px 0;
+      font-weight:750;
+    }
+    .meta{
+      display:flex; flex-wrap:wrap; gap:8px 10px;
+      color:var(--muted); font-size:13px;
+    }
+    .pill{
+      display:inline-flex; align-items:center; gap:6px;
+      background:var(--chip);
+      border:1px solid rgba(255,255,255,.07);
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      color:var(--text);
+      white-space:nowrap;
+    }
+    .pill .dot{ width:8px; height:8px; border-radius:999px; background:#aaa; }
+    .pill.yellow .dot{ background:#facc15; }
+    .pill.orange .dot{ background:#fb923c; }
+    .pill.red .dot{ background:#f87171; }
+
+    .kv{
+      display:grid;
+      grid-template-columns: 120px 1fr;
+      gap:10px;
+      padding:10px 0;
+      border-top:1px dashed rgba(255,255,255,.10);
+    }
+    .kv:first-child{ border-top:none; padding-top:0; }
+    .k{ color:var(--muted); font-size:13px; }
+    .v{ font-size:13px; line-height:1.55; }
+
+    .chips{ display:flex; flex-wrap:wrap; gap:8px; }
+    .chip{
+      background:rgba(255,255,255,.05);
+      border:1px solid rgba(255,255,255,.07);
+      border-radius:999px;
+      padding:6px 10px;
+      font-size:12px;
+      color:var(--text);
+    }
+
+    .content{
+      white-space:pre-wrap;
+      line-height:1.65;
+      font-size:14px;
+      color:rgba(233,238,252,.92);
+    }
+    .muted{ color:var(--muted); }
+
+    table{
+      width:100%;
+      border-collapse:separate;
+      border-spacing:0;
+      overflow:hidden;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.09);
+      background:rgba(0,0,0,.12);
+    }
+    th, td{
+      padding:10px 10px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      font-size:13px;
+      vertical-align:top;
+    }
+    th{
+      text-align:left;
+      color:rgba(233,238,252,.95);
+      font-weight:650;
+      background:rgba(255,255,255,.05);
+    }
+    tr:last-child td{ border-bottom:none; }
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.10);
+      background:rgba(255,255,255,.05);
+      font-size:12px;
+    }
+    .badge b{ font-family:var(--mono); font-weight:650; font-size:11px; opacity:.9; }
+    .error{
+      border:1px solid rgba(248,113,113,.35);
+      background:rgba(248,113,113,.10);
+      padding:14px 16px;
+      border-radius:14px;
+    }
+    .actions{
+      display:flex; gap:8px; flex-wrap:wrap;
+    }
+    .btn{
+      cursor:pointer;
+      padding:9px 12px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.06);
+      color:var(--text);
+      font-size:13px;
+    }
+    .btn:hover{ background:rgba(255,255,255,.09); }
+    .small{ font-size:12px; }
+    .right-stack{ display:flex; flex-direction:column; gap:14px; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">前沿技术情报与预警平台（样机）</div>
+      <div class="nav">
+        <a href="index.html">分级汇总表</a>
+        <a href="info_table.html">情报总表</a>
+        <a href="upload_review.html">上传&复核</a>
+        <a href="dashboard.html">技术仪表盘</a>
+        <a href="literature.html">文献检索</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="actions" style="margin: 10px 0 14px;">
+      <button class="btn" id="btnBack">← 返回</button>
+      <button class="btn" id="btnCopyLink">复制当前链接</button>
+      <span class="badge"><b>ID</b> <span id="infoId">-</span></span>
+      <span class="badge"><b>状态</b> <span id="status">-</span></span>
+    </div>
+
+    <div id="errorBox" class="error" style="display:none;"></div>
+
+    <div class="grid" id="mainGrid" style="display:none;">
+      <!-- LEFT -->
+      <div class="left-stack" style="display:flex; flex-direction:column; gap:14px;">
+        <div class="card">
+          <div class="hd">
+            <div style="min-width:0;">
+              <h1 class="title" id="title">-</h1>
+              <div class="meta">
+                <span>发布时间：<span id="publishedAt">-</span></span>
+                <span>录入时间：<span id="createdAt">-</span></span>
+                <span>领域：<span id="domainPath">-</span></span>
+              </div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-end;">
+              <span class="pill" id="alertPill" style="display:none;"><span class="dot"></span>预警</span>
+              <span class="pill"><span class="dot" style="background:#60a5fa;"></span>重要度 <span id="importanceScore">-</span></span>
+              <span class="pill"><span class="dot" style="background:#34d399;"></span><span id="novelty">-</span></span>
+            </div>
+          </div>
+          <div class="bd">
+            <div class="kv">
+              <div class="k">来源 URL</div>
+              <div class="v"><a id="sourceUrl" href="#" target="_blank" rel="noopener">-</a></div>
+            </div>
+            <div class="kv">
+              <div class="k">来源类型</div>
+              <div class="v"><div class="chips" id="sourceTypes"></div></div>
+            </div>
+            <div class="kv">
+              <div class="k">情报类型</div>
+              <div class="v"><div class="chips" id="infoTypes"></div></div>
+            </div>
+            <div class="kv">
+              <div class="k">标签</div>
+              <div class="v"><div class="chips" id="tags"></div></div>
+            </div>
+            <div class="kv">
+              <div class="k">密级</div>
+              <div class="v" id="classification">-</div>
+            </div>
+            <div class="kv">
+              <div class="k">上传/复核</div>
+              <div class="v"><span class="muted">上传：</span><span id="createdBy">-</span>　<span class="muted">复核：</span><span id="reviewedBy">-</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hd">
+            <div>
+              <div style="font-weight:700;">正文</div>
+              <div class="muted small">样机：支持换行与段落。后续可加“折叠/展开”“复制摘要”等。</div>
+            </div>
+            <button class="btn" id="btnToggleContent">折叠</button>
+          </div>
+          <div class="bd">
+            <div id="content" class="content">-</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hd">
+            <div>
+              <div style="font-weight:700;">指标</div>
+              <div class="muted small">指标名称来自字典（indicator_defs），指标数值绑定情报（indicator_values）。</div>
+            </div>
+          </div>
+          <div class="bd">
+            <div id="indicatorsEmpty" class="muted" style="display:none;">暂无指标</div>
+            <div id="indicatorsTableWrap" style="overflow:auto;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT -->
+      <div class="right-stack">
+        <div class="card" id="alertCard" style="display:none;">
+          <div class="hd">
+            <div>
+              <div style="font-weight:700;">技术预警</div>
+              <div class="muted small">绑定情报：到期可自动解除；样机仅展示。</div>
+            </div>
+            <span class="pill" id="alertColorPill"><span class="dot"></span><span id="alertColorText">-</span></span>
+          </div>
+          <div class="bd">
+            <div class="kv">
+              <div class="k">预警标题</div>
+              <div class="v" id="alertTitle">-</div>
+            </div>
+            <div class="kv">
+              <div class="k">预警内容</div>
+              <div class="v" id="alertBody">-</div>
+            </div>
+            <div class="kv">
+              <div class="k">评论/结论</div>
+              <div class="v" id="reviewerComment">-</div>
+            </div>
+            <div class="kv">
+              <div class="k">到期时间</div>
+              <div class="v"><span id="expiresAt">-</span> <span class="muted">（status: </span><span id="alertStatus">-</span><span class="muted">）</span></div>
+            </div>
+
+            <div style="margin-top:12px;" class="actions">
+              <button class="btn" id="btnSimExtend">模拟：延期</button>
+              <button class="btn" id="btnSimDismiss">模拟：解除</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hd">
+            <div style="font-weight:700;">快速跳转</div>
+          </div>
+          <div class="bd">
+            <div class="muted small" style="margin-bottom:10px;">样机：用 query 参数模拟“带筛选跳转”。</div>
+            <div class="actions">
+              <button class="btn" id="btnGoTable">去情报总表（同领域）</button>
+              <button class="btn" id="btnGoDashboard">去技术仪表盘（同领域）</button>
+              <button class="btn" id="btnGoHome">去分级汇总表（CCUS）</button>
+              <button class="btn" id="btnCreateRevision">创建修订稿（模拟）</button>
+              <button class="btn" id="btnEditDraft">编辑草稿（模拟）</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hd">
+            <div style="font-weight:700;">调试信息</div>
+          </div>
+          <div class="bd">
+            <div class="kv">
+              <div class="k">domain_id</div>
+              <div class="v"><span class="badge"><b>DOM</b> <span id="domainId">-</span></span></div>
+            </div>
+            <div class="kv">
+              <div class="k">has_alert</div>
+              <div class="v" id="hasAlert">-</div>
+            </div>
+            <div class="kv">
+              <div class="k">数据文件</div>
+              <div class="v muted small">
+                /data/domains.json<br/>
+                /data/info_items.json<br/>
+                /data/alerts.json<br/>
+                /data/indicator_defs.json<br/>
+                /data/indicator_values.json
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div><!-- grid -->
+  </div><!-- container -->
+
+  <script type="module">
+    // ---------- tiny utils ----------
+    const $ = (sel) => document.querySelector(sel);
+    const escapeHtml = (s) => (s ?? "").replace(/[&<>"']/g, c => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    }[c]));
+
+    function getQueryParam(name){
+      const url = new URL(window.location.href);
+      return url.searchParams.get(name);
+    }
+    function fmtDate(s){
+      if(!s) return "-";
+      // Handle ISO datetime or YYYY-MM-DD
+      const d = new Date(s);
+      if(!isNaN(d.getTime())){
+        const y = d.getFullYear();
+        const m = String(d.getMonth()+1).padStart(2,"0");
+        const day = String(d.getDate()).padStart(2,"0");
+        return `${y}-${m}-${day}`;
+      }
+      return s;
+    }
+    function renderChips(el, arr){
+      el.innerHTML = "";
+      (arr ?? []).forEach(x=>{
+        const span = document.createElement("span");
+        span.className = "chip";
+        span.textContent = x;
+        el.appendChild(span);
+      });
+      if(!(arr && arr.length)){
+        const span = document.createElement("span");
+        span.className = "muted small";
+        span.textContent = "（无）";
+        el.appendChild(span);
+      }
+    }
+
+    // Domain path: walk parent chain
+    function buildDomainMap(domains){
+      const map = new Map();
+      domains.forEach(d => map.set(d.id, d));
+      return map;
+    }
+    function domainPath(domainId, domainMap){
+      const names = [];
+      let cur = domainMap.get(domainId);
+      while(cur){
+        names.push(cur.name);
+        cur = cur.parent_id ? domainMap.get(cur.parent_id) : null;
+      }
+      return names.reverse().join(" / ");
+    }
+
+    // ---------- data loading ----------
+    async function loadJson(path){
+      const r = await fetch(path, { cache: "no-store" });
+      if(!r.ok) throw new Error(`加载失败：${path} (${r.status})`);
+      return await r.json();
+    }
+
+    async function main(){
+      const id = getQueryParam("id") || "INFO_CCUS_0001";
+      $("#infoId").textContent = id;
+
+      try{
+        const [
+          domains,
+          infoItems,
+          alerts,
+          indicatorDefs,
+          indicatorValues
+        ] = await Promise.all([
+          loadJson("./data/domains.json"),
+          loadJson("./data/info_items.json"),
+          loadJson("./data/alerts.json"),
+          loadJson("./data/indicator_defs.json"),
+          loadJson("./data/indicator_values.json")
+        ]);
+
+        const info = infoItems.find(x => x.id === id);
+        if(!info){
+          throw new Error(`找不到情报：${id}（请检查 info_items.json 是否包含该 id）`);
+        }
+
+        const domainMap = buildDomainMap(domains);
+
+        // join alert (pick active first if multiple)
+        const relatedAlerts = alerts.filter(a => a.info_item_id === id);
+        const alert = relatedAlerts.find(a => a.status === "active") || relatedAlerts[0] || null;
+
+        // join indicators
+        const defMap = new Map(indicatorDefs.map(d => [d.id, d]));
+        const vals = indicatorValues
+          .filter(v => v.info_item_id === id)
+          .map(v => {
+            const def = defMap.get(v.indicator_def_id);
+            return {
+              name: def?.name ?? v.indicator_def_id,
+              unit: v.unit ?? def?.unit_default ?? "",
+              value: v.value_number ?? v.value_text ?? "",
+              value_date: v.value_date ?? "",
+              indicator_def_id: v.indicator_def_id
+            };
+          });
+
+        // ---------- render info ----------
+        $("#mainGrid").style.display = "";
+        $("#status").textContent = info.status ?? "-";
+
+        $("#title").textContent = info.title ?? "-";
+        $("#publishedAt").textContent = fmtDate(info.published_at);
+        $("#createdAt").textContent = fmtDate(info.created_at);
+        $("#domainId").textContent = info.domain_id ?? "-";
+        $("#domainPath").textContent = info.domain_id ? domainPath(info.domain_id, domainMap) : "-";
+
+        $("#importanceScore").textContent = String(info.importance_score ?? "-");
+        $("#novelty").textContent = info.is_new_tech ? "新技术" : "已有技术";
+        $("#hasAlert").textContent = alert ? "true" : "false";
+
+        const url = info.source_url ?? "#";
+        const a = $("#sourceUrl");
+        a.href = url;
+        a.textContent = url;
+
+        renderChips($("#sourceTypes"), info.source_types);
+        renderChips($("#infoTypes"), info.info_types);
+        renderChips($("#tags"), info.tags);
+
+        $("#classification").textContent = info.classification ?? "-";
+        $("#createdBy").textContent = info.created_by ?? "-";
+        $("#reviewedBy").textContent = info.reviewed_by ?? "-";
+
+        // content
+        $("#content").textContent = info.content ?? "-";
+
+        // alert pill in header
+        if(alert){
+          const pill = $("#alertPill");
+          pill.style.display = "inline-flex";
+          pill.classList.remove("yellow","orange","red");
+          pill.classList.add(alert.alert_color || "");
+          pill.querySelector(".dot").style.background =
+            alert.alert_color === "yellow" ? "#facc15" :
+            alert.alert_color === "orange" ? "#fb923c" :
+            alert.alert_color === "red" ? "#f87171" : "#aaa";
+          pill.lastChild ? null : null;
+          pill.childNodes[1].nodeValue = "预警";
+        }
+
+        // ---------- render indicators ----------
+        if(!vals.length){
+          $("#indicatorsEmpty").style.display = "";
+          $("#indicatorsTableWrap").innerHTML = "";
+        }else{
+          $("#indicatorsEmpty").style.display = "none";
+          const rows = vals.map(v => `
+            <tr>
+              <td>${escapeHtml(v.name)}</td>
+              <td>${escapeHtml(String(v.value))}</td>
+              <td>${escapeHtml(v.unit || "-")}</td>
+              <td>${escapeHtml(fmtDate(v.value_date))}</td>
+              <td class="muted">来自本情报</td>
+            </tr>
+          `).join("");
+
+          $("#indicatorsTableWrap").innerHTML = `
+            <table>
+              <thead>
+                <tr>
+                  <th style="min-width:160px;">指标</th>
+                  <th style="min-width:120px;">数值</th>
+                  <th style="min-width:90px;">单位</th>
+                  <th style="min-width:110px;">日期</th>
+                  <th style="min-width:120px;">证据</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          `;
+        }
+
+        // ---------- render alert card ----------
+        if(alert){
+          $("#alertCard").style.display = "";
+          $("#alertTitle").textContent = alert.alert_title ?? "-";
+          $("#alertBody").textContent = alert.alert_body ?? "-";
+          $("#reviewerComment").textContent = alert.reviewer_comment ?? "-";
+          $("#expiresAt").textContent = alert.expires_at ? fmtDate(alert.expires_at) : "永久/未设置";
+          $("#alertStatus").textContent = alert.status ?? "-";
+
+          const cp = $("#alertColorPill");
+          cp.classList.remove("yellow","orange","red");
+          cp.classList.add(alert.alert_color || "");
+          cp.querySelector(".dot").style.background =
+            alert.alert_color === "yellow" ? "#facc15" :
+            alert.alert_color === "orange" ? "#fb923c" :
+            alert.alert_color === "red" ? "#f87171" : "#aaa";
+          $("#alertColorText").textContent =
+            alert.alert_color === "yellow" ? "黄" :
+            alert.alert_color === "orange" ? "橙" :
+            alert.alert_color === "red" ? "红" : (alert.alert_color ?? "-");
+        }
+
+        // ---------- buttons ----------
+        $("#btnBack").onclick = () => history.length > 1 ? history.back() : (window.location.href = "info_table.html");
+        $("#btnCopyLink").onclick = async () => {
+          try{
+            await navigator.clipboard.writeText(window.location.href);
+            alert("已复制链接");
+          }catch{
+            prompt("复制失败，请手动复制：", window.location.href);
+          }
+        };
+
+        let contentCollapsed = false;
+        $("#btnToggleContent").onclick = () => {
+          contentCollapsed = !contentCollapsed;
+          $("#content").style.display = contentCollapsed ? "none" : "";
+          $("#btnToggleContent").textContent = contentCollapsed ? "展开" : "折叠";
+        };
+
+        // quick jump buttons (simulate “carry filters”)
+        const from = getQueryParam("from") || "2025-12-01";
+        const to = getQueryParam("to") || "2026-01-06";
+        $("#btnGoTable").onclick = () => {
+          const q = new URLSearchParams({ domain_id: info.domain_id || "", from, to });
+          window.location.href = `info_table.html?${q.toString()}`;
+        };
+        $("#btnGoDashboard").onclick = () => {
+          const q = new URLSearchParams({ domain_id: info.domain_id || "", from, to });
+          window.location.href = `dashboard.html?${q.toString()}`;
+        };
+        $("#btnGoHome").onclick = () => {
+          // If your CCUS L1 id differs, change here:
+          const q = new URLSearchParams({ domain_id: "DOM_CCUS_L1", from, to });
+          window.location.href = `index.html?${q.toString()}`;
+        };
+
+        // simulate alert actions
+        $("#btnSimExtend")?.addEventListener("click", () => {
+          alert("样机：已模拟延期（真实系统会写 alerts + notifications + audit_logs）");
+        });
+        $("#btnSimDismiss")?.addEventListener("click", () => {
+          alert("样机：已模拟解除（真实系统会写 manual_dismiss_reason + audit_logs）");
+        });
+
+      }catch(err){
+        $("#mainGrid").style.display = "none";
+        $("#errorBox").style.display = "";
+        $("#errorBox").innerHTML = `<div style="font-weight:700;margin-bottom:6px;">页面加载失败</div><div class="muted small">${escapeHtml(err.message || String(err))}</div>
+        <div class="muted small" style="margin-top:10px;">提示：请用本地服务器打开（不要直接双击文件），并确认 ./data 下的 JSON 文件存在。</div>`;
+      }
+    }
+
+    main();
+  </script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+[
+  { "id": "IND_CAPACITY", "name": "工作容量", "unit_default": "mmol_CO2/g", "data_type": "number", "is_active": true },
+  { "id": "IND_REGEN_ENERGY", "name": "再生能耗", "unit_default": "GJ/tCO2", "data_type": "number", "is_active": true },
+  { "id": "IND_CYCLE_STABILITY", "name": "循环稳定性", "unit_default": "% retention @ N cycles", "data_type": "string", "is_active": true }
+]

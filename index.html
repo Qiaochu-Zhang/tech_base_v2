@@ -1,0 +1,895 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>分级汇总表（样机）</title>
+  <style>
+    :root{
+      --bg:#0b1220; --text:#e9eefc; --muted:#a8b3d6; --line:rgba(255,255,255,.10);
+      --r:14px; --shadow: 0 10px 30px rgba(0,0,0,.25);
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0; font-family:var(--sans); color:var(--text);
+      background: radial-gradient(1200px 700px at 20% -10%, rgba(88,101,242,.26), transparent 60%),
+                  radial-gradient(900px 600px at 90% 10%, rgba(34,197,94,.18), transparent 55%),
+                  var(--bg);
+    }
+    a{ color:#9ad2ff; text-decoration:none; }
+    a:hover{ text-decoration:underline; }
+
+    .topbar{
+      position:sticky; top:0; z-index:20;
+      backdrop-filter: blur(10px);
+      background: rgba(11,18,32,.70);
+      border-bottom:1px solid var(--line);
+    }
+    .topbar-inner{
+      max-width:1400px; margin:0 auto;
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px 16px; gap:12px;
+    }
+    .brand{ font-weight:850; }
+    .nav{ display:flex; gap:10px; flex-wrap:wrap; }
+    .nav a{
+      padding:8px 10px; border-radius:10px;
+      background:rgba(255,255,255,.05);
+      border:1px solid rgba(255,255,255,.07);
+      color:var(--text); font-size:14px;
+    }
+
+    .container{ max-width:1400px; margin:0 auto; padding:16px; }
+    .grid{ display:grid; grid-template-columns: 360px 1fr; gap:14px; }
+    @media (max-width: 960px){ .grid{ grid-template-columns: 1fr; } }
+
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border:1px solid var(--line);
+      border-radius: var(--r);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .hd{ padding:12px 14px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    .bd{ padding:12px 14px; }
+    .muted{ color:var(--muted); }
+    .small{ font-size:12px; }
+    .mono{ font-family:var(--mono); }
+
+    label{ display:block; margin:10px 0 6px; color:var(--muted); font-size:12px; }
+    input, select{
+      width:100%;
+      background:rgba(15,23,48,.9);
+      border:1px solid rgba(255,255,255,.12);
+      color:var(--text);
+      padding:10px;
+      border-radius:12px;
+      font-size:13px;
+      outline:none;
+    }
+    input[type="date"]{ padding:9px 10px; }
+    .row{ display:flex; gap:10px; }
+    .row > *{ flex:1; }
+
+    .btn{
+      cursor:pointer;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.14);
+      background:rgba(255,255,255,.06);
+      color:var(--text);
+      font-size:13px;
+      width:100%;
+    }
+    .btn:hover{ background:rgba(255,255,255,.10); }
+
+    table{
+      width:100%; border-collapse:separate; border-spacing:0;
+      border:1px solid rgba(255,255,255,.10);
+      border-radius:12px;
+      overflow:hidden;
+      background:rgba(0,0,0,.10);
+    }
+    th,td{ padding:10px; border-bottom:1px solid rgba(255,255,255,.08); font-size:13px; vertical-align:top; }
+    th{ background:rgba(255,255,255,.06); font-weight:650; white-space:nowrap; }
+    tr:last-child td{ border-bottom:none; }
+    tr:hover td{ background:rgba(255,255,255,.03); }
+
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      background:rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.10);
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      white-space:nowrap;
+    }
+
+    .clicknum{
+      cursor:pointer;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid rgba(154,210,255,.25);
+      background:rgba(154,210,255,.12);
+      user-select:none;
+    }
+    .clicknum:hover{ background:rgba(154,210,255,.18); }
+    .dot{ width:8px; height:8px; border-radius:999px; background:#aaa; }
+    .dot.yellow{ background:#facc15; }
+    .dot.orange{ background:#fb923c; }
+    .dot.red{ background:#f87171; }
+
+    .error{
+      border:1px solid rgba(248,113,113,.35);
+      background:rgba(248,113,113,.10);
+      padding:12px 14px;
+      border-radius:14px;
+      margin-bottom:14px;
+      display:none;
+    }
+
+    .hint{
+      border:1px solid rgba(255,255,255,.10);
+      background:rgba(0,0,0,.10);
+      padding:10px 12px;
+      border-radius:12px;
+      line-height:1.6;
+    }
+
+    /* Tree dropdown with + */
+    .tree{
+      border:1px solid rgba(255,255,255,.10);
+      background:rgba(0,0,0,.10);
+      border-radius:12px;
+      padding:8px;
+      max-height: 360px;
+      overflow:auto;
+    }
+    .tree-row{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:6px 8px;
+      border-radius:10px;
+    }
+    .tree-row:hover{ background:rgba(255,255,255,.06); }
+    .tree-toggle{
+      width:22px; height:22px;
+      display:inline-flex; align-items:center; justify-content:center;
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:8px;
+      background:rgba(255,255,255,.05);
+      cursor:pointer;
+      user-select:none;
+      font-family: var(--mono);
+      font-size:12px;
+    }
+    .tree-toggle.empty{ opacity:.25; cursor:default; }
+    .tree-node{
+      cursor:pointer;
+      user-select:none;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      flex:1;
+    }
+    .tree-node.active{
+      font-weight:800;
+      color:#bfe6ff;
+    }
+    .tree-indent{
+      width: 16px;
+      flex: 0 0 16px;
+    }
+
+    .expandPanel{
+      margin-top:12px;
+      border:1px solid rgba(255,255,255,.10);
+      background:rgba(0,0,0,.10);
+      border-radius:12px;
+      overflow:hidden;
+    }
+    .expandHd{
+      padding:10px 12px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      display:flex; justify-content:space-between; align-items:center; gap:10px;
+    }
+    .expandBd{ padding:10px 12px; }
+    .list{ display:flex; flex-direction:column; gap:10px; }
+    .item{
+      border:1px solid rgba(255,255,255,.10);
+      background:rgba(0,0,0,.12);
+      border-radius:14px;
+      padding:10px 12px;
+    }
+    .item:hover{ background:rgba(255,255,255,.04); }
+    .item-title{ font-weight:750; }
+    .item-meta{ margin-top:6px; display:flex; gap:10px; flex-wrap:wrap; color:var(--muted); font-size:12px; }
+
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">前沿技术情报与预警平台（样机） <span class="muted small">/ 分级汇总表</span></div>
+      <div class="nav">
+        <a href="index.html">分级汇总表</a>
+        <a href="info_table.html">情报总表</a>
+        <a href="upload_review.html">上传&复核</a>
+        <a href="dashboard.html">技术仪表盘</a>
+        <a href="literature.html">文献检索</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div id="errorBox" class="error"></div>
+
+    <div class="grid">
+      <!-- LEFT -->
+      <div class="card">
+        <div class="hd">
+          <div>
+            <div style="font-weight:850;">范围与导航</div>
+            <div class="muted small">根目录选择（树形+号） + 时间范围 + 路径下钻</div>
+          </div>
+        </div>
+        <div class="bd">
+          <div class="hint small muted">
+            说明：默认根目录=最上层（所有一级领域）。你也可以从下面树形列表选一个领域作为“根”，只统计该根的子树。
+          </div>
+
+          <label style="margin-top:12px;">根目录（树形选择，带 + 展开）</label>
+          <div class="pill" style="width:100%; justify-content:space-between;">
+            <span id="rootPathText" class="small">最上层（全部一级领域）</span>
+            <span id="rootIdText" class="mono small">ROOT</span>
+          </div>
+          <div id="rootTree" class="tree" style="margin-top:10px;"></div>
+
+          <label style="margin-top:12px;">时间范围</label>
+          <div class="row">
+            <div>
+              <label>From</label>
+              <input id="fromDate" type="date" />
+            </div>
+            <div>
+              <label>To</label>
+              <input id="toDate" type="date" />
+            </div>
+          </div>
+
+          <label style="margin-top:12px;">当前下钻路径</label>
+          <div class="pill" style="width:100%; justify-content:space-between;">
+            <span id="pathText" class="small">-</span>
+            <span id="levelText" class="mono small">-</span>
+          </div>
+
+          <div class="row" style="margin-top:12px;">
+            <button class="btn" id="btnBack">返回上一级</button>
+            <button class="btn" id="btnResetToRoot">回到根目录</button>
+          </div>
+
+          <div class="row" style="margin-top:10px;">
+            <button class="btn" id="btnApply">应用筛选</button>
+            <button class="btn" id="btnGoInfoTable">查看所有情报</button>
+          </div>
+
+          <div class="muted small" style="margin-top:10px;">
+            Tip：点击表格里的数字，会在右侧表格下方展开对应 Top10（情报/预警）。
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT -->
+      <div class="card">
+        <div class="hd">
+          <div>
+            <div style="font-weight:850;">分级汇总表</div>
+            <div class="muted small">行=当前层级子领域；点击领域名下钻</div>
+          </div>
+          <div class="pill"><span class="muted small">统计窗口：</span><span id="rangeText">-</span></div>
+        </div>
+        <div class="bd">
+          <div style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th style="min-width:240px;">领域</th>
+                  <th>情报总数</th>
+                  <th>技术情报</th>
+                  <th>技术预警（active）</th>
+                  <th>政策情报</th>
+                </tr>
+              </thead>
+              <tbody id="tbody"></tbody>
+            </table>
+          </div>
+
+          <div class="expandPanel" id="expandPanel" style="display:none;">
+            <div class="expandHd">
+              <div>
+                <div style="font-weight:850;" id="expandTitle">-</div>
+                <div class="muted small" id="expandSub">-</div>
+              </div>
+              <div class="pill"><span class="muted small">Top：</span><span id="expandTopN">10</span></div>
+            </div>
+            <div class="expandBd">
+              <div id="expandList" class="list"></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<script type="module">
+  const $ = s => document.querySelector(s);
+
+  // ---------------- URL helpers ----------------
+  function sp(){ return new URLSearchParams(location.search); }
+  function qp(k){ return sp().get(k); }
+  function setQuery(obj){
+    const p = sp();
+    for(const [k,v] of Object.entries(obj)){
+      if(v === null || v === undefined || v === "") p.delete(k);
+      else p.set(k, v);
+    }
+    history.replaceState(null, "", `${location.pathname}?${p.toString()}`);
+  }
+
+
+    function isInSubtree(childId, ancestorId, domainMap){
+    if(!ancestorId) return true; // ROOT没有边界
+    let cur = domainMap.get(childId);
+    while(cur){
+    if(cur.id === ancestorId) return true;
+    cur = cur.parent_id ? domainMap.get(cur.parent_id) : null;
+    }
+    return false;
+    }
+
+
+
+  // ---------------- date helpers ----------------
+  function todayISO(){
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const day = String(d.getDate()).padStart(2,"0");
+    return `${y}-${m}-${day}`;
+  }
+  function daysAgoISO(n){
+    const d = new Date();
+    d.setDate(d.getDate()-n);
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const day = String(d.getDate()).padStart(2,"0");
+    return `${y}-${m}-${day}`;
+  }
+  function fmtDate(s){ return (s||"").slice(0,10); }
+  function inRange(dateStr, from, to){
+    const d = fmtDate(dateStr);
+    if(!d) return false;
+    if(from && d < from) return false;
+    if(to && d > to) return false;
+    return true;
+  }
+  function isExpiredAlert(alert, toDate){
+    if(alert.status !== "active") return true;
+    if(!alert.expires_at) return false; // permanent
+    // expires_at < today(or toDate) => expired
+    const t = toDate || todayISO();
+    return fmtDate(alert.expires_at) < fmtDate(t);
+  }
+
+  // ---------------- load json ----------------
+  async function loadJson(path){
+    const r = await fetch(path, { cache:"no-store" });
+    if(!r.ok) throw new Error(`加载失败：${path} (${r.status})`);
+    return r.json();
+  }
+
+  // ---------------- domain helpers ----------------
+  function buildDomainMap(domains){
+    return new Map(domains.map(d=>[d.id,d]));
+  }
+  function domainPath(domainId, dm){
+    if(!domainId) return "最上层（全部一级领域）";
+    const names=[];
+    let cur = dm.get(domainId);
+    while(cur){
+      names.push(cur.name);
+      cur = cur.parent_id ? dm.get(cur.parent_id) : null;
+    }
+    return names.reverse().join(" / ");
+  }
+  function buildChildrenIndex(domains){
+    const byParent = new Map();
+    for(const d of domains){
+      if(d.is_active === false) continue;
+      const p = d.parent_id ?? null;
+      if(!byParent.has(p)) byParent.set(p, []);
+      byParent.get(p).push(d);
+    }
+    for(const [p, arr] of byParent.entries()){
+      arr.sort((a,b)=>{
+        const sa = a.sort_order ?? 999, sb = b.sort_order ?? 999;
+        if(sa !== sb) return sa - sb;
+        return (a.name||"").localeCompare(b.name||"");
+      });
+    }
+    return byParent;
+  }
+  function collectSubtreeIds(domainId, domains){
+    const out = new Set();
+    const byParent = new Map();
+    for(const d of domains){
+      if(d.is_active === false) continue;
+      const p = d.parent_id ?? null;
+      if(!byParent.has(p)) byParent.set(p, []);
+      byParent.get(p).push(d.id);
+    }
+    const stack = [];
+    if(domainId){
+      stack.push(domainId);
+    }else{
+      // ROOT: all top-level
+      (byParent.get(null) || []).forEach(id=>stack.push(id));
+    }
+
+    while(stack.length){
+      const cur = stack.pop();
+      if(!cur || out.has(cur)) continue;
+      out.add(cur);
+      (byParent.get(cur) || []).forEach(k=>stack.push(k));
+    }
+    return out;
+  }
+
+  // ---------------- business helpers ----------------
+  function isTech(info){ return (info.info_types||[]).includes("技术"); }
+  function isPolicy(info){ return (info.info_types||[]).includes("政策"); }
+  function getActiveAlertByInfoId(infoId, alerts, toDate){
+    const a = alerts.find(x => x.info_item_id === infoId && x.status==="active") || null;
+    if(!a) return null;
+    if(isExpiredAlert(a, toDate)) return null;
+    return a;
+  }
+  function dotClass(c){
+    if(c==="yellow") return "yellow";
+    if(c==="orange") return "orange";
+    if(c==="red") return "red";
+    return "";
+  }
+  function labelColor(c){
+    if(c==="yellow") return "黄";
+    if(c==="orange") return "橙";
+    if(c==="red") return "红";
+    return c || "-";
+  }
+  function sortByImportanceThenTime(items){
+    const arr=[...items];
+    arr.sort((a,b)=>{
+      const ia=a.importance_score??0, ib=b.importance_score??0;
+      if(ib!==ia) return ib-ia;
+      return fmtDate(b.published_at).localeCompare(fmtDate(a.published_at));
+    });
+    return arr;
+  }
+
+  // ---------------- Tree dropdown (root selector) ----------------
+  function renderRootTree(domains, domainMap, rootId, setRootId){
+    const box = $("#rootTree");
+    box.innerHTML = "";
+
+    const CHILDREN = buildChildrenIndex(domains);
+    const expanded = new Set(); // local expanded state for root tree
+    // default expand roots
+    (CHILDREN.get(null) || []).forEach(d => expanded.add(d.id));
+
+    function renderNode(node, depth){
+      const row = document.createElement("div");
+      row.className = "tree-row";
+
+      for(let i=0;i<depth;i++){
+        const ind = document.createElement("div");
+        ind.className = "tree-indent";
+        row.appendChild(ind);
+      }
+
+      const kids = CHILDREN.get(node.id) || [];
+      const expandable = kids.length > 0;
+
+      const toggle = document.createElement("div");
+      toggle.className = "tree-toggle" + (expandable ? "" : " empty");
+      toggle.textContent = expandable ? (expanded.has(node.id) ? "−" : "+") : "·";
+      if(expandable){
+        toggle.addEventListener("click", (e)=>{
+          e.stopPropagation();
+          if(expanded.has(node.id)) expanded.delete(node.id);
+          else expanded.add(node.id);
+          box.innerHTML = "";
+          renderAllRoots();
+        });
+      }
+      row.appendChild(toggle);
+
+      const label = document.createElement("div");
+      label.className = "tree-node" + (node.id === rootId ? " active" : "");
+      label.textContent = `L${node.level} · ${node.name}`;
+      label.title = domainPath(node.id, domainMap);
+      label.addEventListener("click", ()=>{
+        setRootId(node.id);
+      });
+      row.appendChild(label);
+
+      box.appendChild(row);
+
+      if(expanded.has(node.id)){
+        for(const c of kids){
+          renderNode(c, depth+1);
+        }
+      }
+    }
+
+    // include a special ROOT option on top
+    const rootRow = document.createElement("div");
+    rootRow.className = "tree-row";
+    const rootToggle = document.createElement("div");
+    rootToggle.className = "tree-toggle empty";
+    rootToggle.textContent = "·";
+    const rootLabel = document.createElement("div");
+    rootLabel.className = "tree-node" + (!rootId ? " active" : "");
+    rootLabel.textContent = "ROOT · 最上层（全部一级领域）";
+    rootLabel.title = "统计所有一级领域";
+    rootLabel.addEventListener("click", ()=> setRootId(null));
+    rootRow.appendChild(rootToggle);
+    rootRow.appendChild(rootLabel);
+    box.appendChild(rootRow);
+
+    function renderAllRoots(){
+      const roots = CHILDREN.get(null) || [];
+      roots.forEach(r => renderNode(r, 0));
+    }
+    renderAllRoots();
+  }
+
+  // ---------------- Expand panel ----------------
+  function showExpand(kind, domainId, title, items, domainMap, alerts, toDate){
+    $("#expandPanel").style.display = "";
+    $("#expandTitle").textContent = title;
+    $("#expandSub").textContent = `${kind==="info" ? "情报" : "预警"} Top10 · 点击标题进详情`;
+    $("#expandTopN").textContent = "10";
+
+    const box = $("#expandList");
+    box.innerHTML = "";
+
+    if(items.length===0){
+      box.innerHTML = `<div class="muted">无可展示条目</div>`;
+      return;
+    }
+
+    const list = items.slice(0,10).map(it=>{
+      const a = getActiveAlertByInfoId(it.id, alerts, toDate);
+      return { it, a };
+    }).filter(x => kind==="info" ? true : !!x.a);
+
+    if(list.length===0){
+      box.innerHTML = `<div class="muted">无可展示条目</div>`;
+      return;
+    }
+
+    for(const {it, a} of list){
+      const el = document.createElement("div");
+      el.className = "item";
+      el.innerHTML = `
+        <div class="item-title">
+          <a href="info_detail.html?id=${encodeURIComponent(it.id)}">${it.title}</a>
+        </div>
+        <div class="item-meta">
+          <span>${fmtDate(it.published_at)}</span>
+          <span>重要度 ${it.importance_score ?? "-"}</span>
+          ${a ? `<span class="pill"><span class="dot ${dotClass(a.alert_color)}"></span> 预警${labelColor(a.alert_color)}</span>` : `<span class="muted">无预警</span>`}
+          <span class="muted">${domainPath(it.domain_id, domainMap)}</span>
+        </div>
+      `;
+      box.appendChild(el);
+    }
+  }
+
+  // ---------------- main ----------------
+  async function main(){
+    try{
+      const [domains, infoItemsRaw, alertsRaw] = await Promise.all([
+        loadJson("./data/domains.json"),
+        loadJson("./data/info_items.json"),
+        loadJson("./data/alerts.json")
+      ]);
+
+      const domainMap = buildDomainMap(domains);
+
+      // state: rootId is the "tree dropdown" selection (null means ROOT/top-level)
+      let rootId = qp("root_id") || null;
+
+      // state: current browsing domainId for drill-down (null means show children of rootId)
+      // if root is ROOT(null), current=null means show top-level domains
+      let currentId = qp("domain_id") || null;
+
+      // init dates
+      $("#fromDate").value = qp("from") || daysAgoISO(30);
+      $("#toDate").value = qp("to") || todayISO();
+
+      function syncLeft(){
+        $("#rootPathText").textContent = domainPath(rootId, domainMap);
+        $("#rootIdText").textContent = rootId ? rootId : "ROOT";
+
+        // drill-down path
+        const p = currentId ? domainPath(currentId, domainMap) : (rootId ? domainPath(rootId, domainMap) : "最上层（全部一级领域）");
+        $("#pathText").textContent = p;
+        const lvl = currentId ? (domainMap.get(currentId)?.level ?? "-") : (rootId ? (domainMap.get(rootId)?.level ?? "-") : "ROOT");
+        $("#levelText").textContent = `LEVEL=${lvl}`;
+
+        $("#rangeText").textContent = `${$("#fromDate").value} ~ ${$("#toDate").value}`;
+      }
+
+      // render root tree
+      renderRootTree(domains, domainMap, rootId, (newRootId)=>{
+        rootId = newRootId;
+        // reset drill-down when root changes
+        currentId = null;
+        setQuery({ root_id: rootId || "", domain_id: "" });
+        syncLeft();
+        renderTableAndResetExpand();
+      });
+
+      function visibleChildrenIds(parentId){
+        // within root subtree: parentId children (or top-level if parentId null)
+        const CHILDREN = buildChildrenIndex(domains);
+        if(parentId){
+          return (CHILDREN.get(parentId) || []).map(d=>d.id);
+        }
+        // parentId null => show children of rootId (or top-level if rootId null)
+        if(rootId){
+          return (CHILDREN.get(rootId) || []).map(d=>d.id);
+        }
+        // rootId null => top-level
+        return (CHILDREN.get(null) || []).map(d=>d.id);
+      }
+
+      function filterInfoItemsInRootRange(){
+        const from = $("#fromDate").value;
+        const to = $("#toDate").value;
+
+        const rootSubtree = collectSubtreeIds(rootId, domains);
+
+        // only published & in date range & in root subtree
+        return infoItemsRaw.filter(i =>
+          i.status === "published" &&
+          rootSubtree.has(i.domain_id) &&
+          inRange(i.published_at, from, to)
+        );
+      }
+
+      function renderTableAndResetExpand(){
+        $("#expandPanel").style.display = "none";
+        renderSummaryTable();
+      }
+
+      function renderSummaryTable(){
+        const from = $("#fromDate").value;
+        const to = $("#toDate").value;
+
+        const tbody = $("#tbody");
+        tbody.innerHTML = "";
+
+        const items = filterInfoItemsInRootRange();
+        const alerts = alertsRaw; // raw, we will filter active + not expired in helpers
+
+        const childIds = visibleChildrenIds(currentId);
+
+        // total row = aggregated of current scope (root subtree or current subtree)
+        const scopeSubtree = collectSubtreeIds(currentId ? currentId : (rootId ? rootId : null), domains);
+
+        const scopeItems = items.filter(i => scopeSubtree.has(i.domain_id));
+        const scopeTech = scopeItems.filter(isTech);
+        const scopePolicy = scopeItems.filter(isPolicy);
+        const scopeActiveAlerts = scopeItems.filter(i => !!getActiveAlertByInfoId(i.id, alerts, to));
+
+        function addRow(label, domainId, counts, isTotal=false){
+          const tr = document.createElement("tr");
+
+          const nameTd = document.createElement("td");
+          nameTd.innerHTML = isTotal
+            ? `<span style="font-weight:850;">${label}</span>`
+            : `<a href="#" data-down="${encodeURIComponent(domainId)}">${label}</a>
+               <div class="muted small">${domainPath(domainId, domainMap)}</div>`;
+          tr.appendChild(nameTd);
+
+          const makeNum = (n, kind, did) => {
+            const span = document.createElement("span");
+            span.className = "clicknum";
+            span.setAttribute("data-kind", kind);
+            span.setAttribute("data-did", did || "");
+            span.textContent = String(n);
+            return span;
+          };
+
+          const tdTotal = document.createElement("td"); tdTotal.appendChild(makeNum(counts.total, "info", domainId||"")); tr.appendChild(tdTotal);
+          const tdTech = document.createElement("td"); tdTech.appendChild(makeNum(counts.tech, "info", domainId||"")); tr.appendChild(tdTech);
+          const tdAlert = document.createElement("td"); tdAlert.appendChild(makeNum(counts.alert, "alert", domainId||"")); tr.appendChild(tdAlert);
+          const tdPolicy = document.createElement("td"); tdPolicy.appendChild(makeNum(counts.policy, "info", domainId||"")); tr.appendChild(tdPolicy);
+
+          tbody.appendChild(tr);
+        }
+
+        addRow("总计", null, {
+          total: scopeItems.length,
+          tech: scopeTech.length,
+          alert: scopeActiveAlerts.length,
+          policy: scopePolicy.length
+        }, true);
+
+        // rows for each child domain
+        for(const did of childIds){
+          const subtree = collectSubtreeIds(did, domains);
+          const its = items.filter(i => subtree.has(i.domain_id));
+          const tech = its.filter(isTech);
+          const policy = its.filter(isPolicy);
+          const activeAlerts = its.filter(i => !!getActiveAlertByInfoId(i.id, alerts, to));
+
+          addRow(domainMap.get(did)?.name || did, did, {
+            total: its.length,
+            tech: tech.length,
+            alert: activeAlerts.length,
+            policy: policy.length
+          });
+        }
+
+        // bind drill down
+        tbody.querySelectorAll("[data-down]").forEach(a=>{
+          a.addEventListener("click", (e)=>{
+            e.preventDefault();
+            const did = decodeURIComponent(a.getAttribute("data-down"));
+            currentId = did;
+            setQuery({ domain_id: currentId });
+            syncLeft();
+            renderTableAndResetExpand();
+          });
+        });
+
+        // bind expand top10
+        tbody.querySelectorAll(".clicknum").forEach(el=>{
+          el.addEventListener("click", ()=>{
+            const kind = el.getAttribute("data-kind"); // info | alert
+            const did = el.getAttribute("data-did") || null;
+            const targetDomainId = did ? did : (currentId ? currentId : (rootId ? rootId : null));
+
+            const targetSubtree = collectSubtreeIds(targetDomainId, domains);
+            const scopeItems2 = items.filter(i => targetSubtree.has(i.domain_id));
+            const sorted = sortByImportanceThenTime(scopeItems2);
+
+            const t = (kind==="alert")
+              ? `预警 Top10（${domainPath(targetDomainId, domainMap)}）`
+              : `情报 Top10（${domainPath(targetDomainId, domainMap)}）`;
+
+            showExpand(kind, targetDomainId, t, sorted, domainMap, alerts, to);
+          });
+        });
+      }
+
+      $("#btnApply").addEventListener("click", ()=>{
+  // 作用：把日期范围应用到统计，并写入URL，重算表格/Top10
+  setQuery({ from: $("#fromDate").value, to: $("#toDate").value });
+  syncLeft();
+  renderTableAndResetExpand();
+});
+
+$("#btnResetToRoot").addEventListener("click", ()=>{
+  rootId = null;
+  currentId = null;
+  setQuery({ root_id: "", domain_id: "" });
+
+  $("#expandPanel").style.display = "none";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+
+  renderRootTree(domains, domainMap, rootId, (newRootId)=>{
+    rootId = newRootId;
+    currentId = null;
+    setQuery({ root_id: rootId || "", domain_id: "" });
+    syncLeft();
+    renderTableAndResetExpand();
+  });
+
+  syncLeft();
+  renderTableAndResetExpand();
+});
+
+
+
+$("#btnBack").addEventListener("click", ()=>{
+  // 规则：
+  // 1) 如果已经在根视角（currentId=null），再点返回：把根也重置为ROOT（可选策略）
+  // 2) 如果 currentId 有值：返回到 parent；如果 parent 越过 root 边界，就回到根视角（currentId=null）
+
+  if(!currentId){
+    // ✅ 你要的“返回上一级”在根视角时怎么表现？
+    // 我建议：回到最上层 ROOT（让它一定有动作）
+    if(rootId){
+      rootId = null;
+      currentId = null;
+      setQuery({ root_id: "", domain_id: "" });
+      // 重新渲染树（因为root变了）
+      renderRootTree(domains, domainMap, rootId, (newRootId)=>{
+        rootId = newRootId;
+        currentId = null;
+        setQuery({ root_id: rootId || "", domain_id: "" });
+        syncLeft();
+        renderTableAndResetExpand();
+      });
+      syncLeft();
+      renderTableAndResetExpand();
+    }
+    return;
+  }
+
+  const cur = domainMap.get(currentId);
+  const parent = cur?.parent_id || null;
+
+  // parent 为空 -> 回到根视角
+  if(!parent){
+    currentId = null;
+  }else{
+    // 有 root 边界：如果 parent 不在 root 子树里，回到根视角
+    if(rootId && !isInSubtree(parent, rootId, domainMap)){
+      currentId = null;
+    }else{
+      currentId = parent;
+      // 如果 parent 正好等于 rootId，也回到根视角（因为根视角就是显示 root 的子域）
+      if(rootId && currentId === rootId) currentId = null;
+    }
+  }
+
+  setQuery({ domain_id: currentId || "" });
+  syncLeft();
+  renderTableAndResetExpand();
+});
+
+
+      $("#btnGoInfoTable").addEventListener("click", ()=>{
+        // go to info_table with current scope filters
+        const q = new URLSearchParams({
+          from: $("#fromDate").value,
+          to: $("#toDate").value
+        });
+        if(rootId) q.set("root_id", rootId);
+        if(currentId) q.set("domain_id", currentId);
+        location.href = `info_table.html?${q.toString()}`;
+      });
+
+      // initial sync & render
+      syncLeft();
+      renderTableAndResetExpand();
+
+    }catch(err){
+      $("#errorBox").style.display = "";
+      $("#errorBox").innerHTML = `
+        <div style="font-weight:850;margin-bottom:6px;">页面加载失败</div>
+        <div class="muted small">${(err && err.message) ? err.message : String(err)}</div>
+        <div class="muted small" style="margin-top:10px;">
+          提示：请用本地服务器打开（不要直接双击文件），并确认 ./data 下的 JSON 文件存在且命名正确。
+        </div>
+      `;
+    }
+  }
+
+  main();
+</script>
+</body>
+</html>

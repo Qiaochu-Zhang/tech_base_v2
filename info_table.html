@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>情报总表（样机）</title>
+  <style>
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
+      background:#0b1220;
+      color:#e9eefc;
+    }
+    a{ color:#8fd3ff; text-decoration:none; }
+    a:hover{ text-decoration:underline; }
+
+    .topbar{
+      position:sticky; top:0;
+      background:#0b1220;
+      border-bottom:1px solid rgba(255,255,255,.1);
+      padding:12px 16px;
+      display:flex; justify-content:space-between; align-items:center;
+    }
+
+    .nav a{
+      margin-right:10px;
+      padding:6px 10px;
+      border-radius:8px;
+      background:rgba(255,255,255,.06);
+      color:#fff;
+      font-size:14px;
+    }
+
+    .container{
+      max-width:1200px;
+      margin:0 auto;
+      padding:16px;
+    }
+
+    .filters{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      margin-bottom:14px;
+    }
+
+    .filters input, .filters select{
+      background:#111a2f;
+      border:1px solid rgba(255,255,255,.12);
+      color:#fff;
+      padding:6px 10px;
+      border-radius:8px;
+      font-size:13px;
+    }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+      background:#0f1730;
+      border-radius:12px;
+      overflow:hidden;
+    }
+
+    th, td{
+      padding:10px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      font-size:13px;
+      text-align:left;
+    }
+
+    th{
+      background:#101a35;
+      font-weight:600;
+    }
+
+    tr:hover td{
+      background:rgba(255,255,255,.03);
+    }
+
+    .badge{
+      display:inline-block;
+      padding:3px 8px;
+      border-radius:999px;
+      font-size:12px;
+      background:rgba(255,255,255,.08);
+    }
+
+    .badge.yellow{ background:#facc15; color:#000; }
+    .badge.orange{ background:#fb923c; color:#000; }
+    .badge.red{ background:#f87171; color:#000; }
+
+    .muted{ color:#9aa6c7; }
+
+    .empty{
+      padding:30px;
+      text-align:center;
+      color:#9aa6c7;
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div><b>前沿技术情报与预警平台（样机）</b></div>
+  <div class="nav">
+    <a href="index.html">分级汇总表</a>
+    <a href="info_table.html">情报总表</a>
+    <a href="dashboard.html">技术仪表盘</a>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- 筛选区 -->
+  <div class="filters">
+    <input type="date" id="fromDate">
+    <input type="date" id="toDate">
+
+    <select id="alertFilter">
+      <option value="">全部情报</option>
+      <option value="true">仅预警</option>
+      <option value="false">非预警</option>
+    </select>
+
+    <input type="text" id="keyword" placeholder="关键词（标题/正文）">
+
+    <select id="sortBy">
+      <option value="importance">按重要度</option>
+      <option value="time">按时间</option>
+    </select>
+
+    <button id="applyBtn">筛选</button>
+  </div>
+
+  <!-- 表格 -->
+  <table>
+    <thead>
+      <tr>
+        <th>标题</th>
+        <th>发布时间</th>
+        <th>领域</th>
+        <th>重要度</th>
+        <th>预警</th>
+        <th>来源</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+
+  <div id="emptyBox" class="empty" style="display:none;">
+    无符合条件的情报
+  </div>
+
+</div>
+
+<script type="module">
+  const $ = s => document.querySelector(s);
+
+  function qp(name){
+    return new URLSearchParams(location.search).get(name);
+  }
+
+  function fmt(d){
+    if(!d) return "-";
+    return d.slice(0,10);
+  }
+
+  async function loadJson(p){
+    const r = await fetch(p);
+    return await r.json();
+  }
+
+  function inDateRange(date, from, to){
+    if(from && date < from) return false;
+    if(to && date > to) return false;
+    return true;
+  }
+
+  async function main(){
+    const [
+      infos,
+      alerts,
+      domains
+    ] = await Promise.all([
+      loadJson("./data/info_items.json"),
+      loadJson("./data/alerts.json"),
+      loadJson("./data/domains.json")
+    ]);
+
+    const domainMap = Object.fromEntries(domains.map(d=>[d.id,d]));
+
+    function domainPath(id){
+      const arr=[];
+      let cur=domainMap[id];
+      while(cur){
+        arr.push(cur.name);
+        cur = cur.parent_id ? domainMap[cur.parent_id] : null;
+      }
+      return arr.reverse().join(" / ");
+    }
+
+    // 初始值（来自 URL）
+    $("#fromDate").value = qp("from") || "";
+    $("#toDate").value = qp("to") || "";
+    $("#alertFilter").value = qp("has_alert") || "";
+    $("#keyword").value = qp("q") || "";
+    $("#sortBy").value = qp("sort") || "importance";
+
+    function render(){
+      const from = $("#fromDate").value;
+      const to = $("#toDate").value;
+      const hasAlert = $("#alertFilter").value;
+      const q = $("#keyword").value.trim().toLowerCase();
+      const sortBy = $("#sortBy").value;
+
+      let rows = infos.filter(i => i.status === "published");
+
+      rows = rows.filter(i =>
+        inDateRange(i.published_at, from, to)
+      );
+
+      if(hasAlert){
+        rows = rows.filter(i => {
+          const a = alerts.find(x => x.info_item_id === i.id && x.status==="active");
+          return hasAlert==="true" ? !!a : !a;
+        });
+      }
+
+      if(q){
+        rows = rows.filter(i =>
+          i.title.toLowerCase().includes(q) ||
+          i.content.toLowerCase().includes(q)
+        );
+      }
+
+      rows.sort((a,b)=>{
+        if(sortBy==="time"){
+          return b.published_at.localeCompare(a.published_at);
+        }
+        return (b.importance_score||0)-(a.importance_score||0);
+      });
+
+      const tbody = $("#tableBody");
+      tbody.innerHTML = "";
+
+      if(!rows.length){
+        $("#emptyBox").style.display="";
+        return;
+      }else{
+        $("#emptyBox").style.display="none";
+      }
+
+      for(const i of rows){
+        const alert = alerts.find(a=>a.info_item_id===i.id && a.status==="active");
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+          <td>
+            <a href="info_detail.html?id=${i.id}">${i.title}</a>
+          </td>
+          <td>${fmt(i.published_at)}</td>
+          <td class="muted">${domainPath(i.domain_id)}</td>
+          <td>${i.importance_score}</td>
+          <td>
+            ${alert ? `<span class="badge ${alert.alert_color}">${alert.alert_color}</span>` : "—"}
+          </td>
+          <td class="muted">${(i.source_types||[]).join(" / ")}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    $("#applyBtn").onclick = render;
+    render();
+  }
+
+  main();
+</script>
+
+</body>
+</html>
