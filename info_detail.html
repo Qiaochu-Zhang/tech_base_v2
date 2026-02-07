@@ -195,6 +195,34 @@ Open: info_detail.html?id=INFO_CCUS_0001
     .btn:hover{ background:rgba(255,255,255,.09); }
     .small{ font-size:12px; }
     .right-stack{ display:flex; flex-direction:column; gap:14px; }
+    .modal{
+      position:fixed; inset:0;
+      background:rgba(0,0,0,.55);
+      display:none;
+      align-items:center; justify-content:center;
+      z-index:50;
+      padding:16px;
+    }
+    .modal .box{
+      width:min(720px, 100%);
+      background:rgba(11,18,32,.96);
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:16px;
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .modal .box .hd{ border-bottom:1px solid rgba(255,255,255,.10); }
+    .modal .box .bd{ padding:14px; }
+    .modal input, .modal select{
+      width:100%;
+      background:rgba(15,23,48,.9);
+      border:1px solid rgba(255,255,255,.12);
+      color:var(--text);
+      padding:10px;
+      border-radius:12px;
+      font-size:13px;
+      outline:none;
+    }
   </style>
 </head>
 <body>
@@ -202,11 +230,11 @@ Open: info_detail.html?id=INFO_CCUS_0001
     <div class="topbar-inner">
       <div class="brand">前沿技术情报与预警平台（样机）</div>
       <div class="nav">
-        <a href="index.html">分级汇总表</a>
+        <a href="index.html">首页工作台</a>
         <a href="info_table.html">情报总表</a>
         <a href="upload_review.html">上传&复核</a>
-        <a href="dashboard.html">技术仪表盘</a>
-        <a href="literature.html">文献检索</a>
+        <a href="drafts.html">草稿管理</a>
+        <a href="excel_import.html">Excel 批量导入</a>
       </div>
     </div>
   </div>
@@ -256,6 +284,10 @@ Open: info_detail.html?id=INFO_CCUS_0001
             <div class="kv">
               <div class="k">标签</div>
               <div class="v"><div class="chips" id="tags"></div></div>
+            </div>
+            <div class="kv">
+              <div class="k">comment</div>
+              <div class="v" id="comment">-</div>
             </div>
             <div class="kv">
               <div class="k">密级</div>
@@ -324,6 +356,7 @@ Open: info_detail.html?id=INFO_CCUS_0001
             </div>
 
             <div style="margin-top:12px;" class="actions">
+              <button class="btn" id="btnManualAlert">人工编辑预警</button>
               <button class="btn" id="btnSimExtend">模拟：延期</button>
               <button class="btn" id="btnSimDismiss">模拟：解除</button>
             </div>
@@ -338,8 +371,7 @@ Open: info_detail.html?id=INFO_CCUS_0001
             <div class="muted small" style="margin-bottom:10px;">样机：用 query 参数模拟“带筛选跳转”。</div>
             <div class="actions">
               <button class="btn" id="btnGoTable">去情报总表（同领域）</button>
-              <button class="btn" id="btnGoDashboard">去技术仪表盘（同领域）</button>
-              <button class="btn" id="btnGoHome">去分级汇总表（CCUS）</button>
+              <button class="btn" id="btnGoHome">去首页工作台</button>
               <button class="btn" id="btnCreateRevision">创建修订稿（模拟）</button>
               <button class="btn" id="btnEditDraft">编辑草稿（模拟）</button>
             </div>
@@ -376,12 +408,51 @@ Open: info_detail.html?id=INFO_CCUS_0001
     </div><!-- grid -->
   </div><!-- container -->
 
+  <div class="modal" id="manualAlertModal">
+    <div class="box">
+      <div class="hd">
+        <div style="font-weight:700;">人工预警编辑</div>
+        <button class="btn" id="btnCloseManual">关闭</button>
+      </div>
+      <div class="bd">
+        <div class="muted small" id="manualAlertTitle">-</div>
+        <label style="margin-top:10px;">预警标题</label>
+        <input id="manualAlertTitleInput" placeholder="填写预警标题" />
+        <label>预警内容</label>
+        <input id="manualAlertBodyInput" placeholder="填写预警内容" />
+        <label>预警颜色</label>
+        <select id="manualAlertColor">
+          <option value="yellow">黄色</option>
+          <option value="orange" selected>橙色</option>
+          <option value="red">红色</option>
+        </select>
+        <label>解除预警（填写原因）</label>
+        <input id="manualDismissReason" placeholder="如需解除，填写原因" />
+        <div class="actions" style="margin-top:12px;">
+          <button class="btn" id="btnSaveManual">保存</button>
+          <button class="btn" id="btnDismissManual">解除预警</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
     // ---------- tiny utils ----------
     const $ = (sel) => document.querySelector(sel);
     const escapeHtml = (s) => (s ?? "").replace(/[&<>"']/g, c => ({
       "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
     }[c]));
+    const manualKey = "manualAlerts";
+
+    function getDomainIds(item){
+      if(Array.isArray(item.domain_ids) && item.domain_ids.length){
+        return item.domain_ids;
+      }
+      if(item.domain_id){
+        return [item.domain_id];
+      }
+      return [];
+    }
 
     function getQueryParam(name){
       const url = new URL(window.location.href);
@@ -463,10 +534,12 @@ Open: info_detail.html?id=INFO_CCUS_0001
         }
 
         const domainMap = buildDomainMap(domains);
+        const manualAlerts = JSON.parse(localStorage.getItem(manualKey) || "{}");
 
-        // join alert (pick active first if multiple)
+        // join alert (manual override -> active -> fallback)
+        const manualAlert = manualAlerts[id] && manualAlerts[id].status === "active" ? manualAlerts[id] : null;
         const relatedAlerts = alerts.filter(a => a.info_item_id === id);
-        const alert = relatedAlerts.find(a => a.status === "active") || relatedAlerts[0] || null;
+        const alert = manualAlert || relatedAlerts.find(a => a.status === "active") || relatedAlerts[0] || null;
 
         // join indicators
         const defMap = new Map(indicatorDefs.map(d => [d.id, d]));
@@ -490,8 +563,9 @@ Open: info_detail.html?id=INFO_CCUS_0001
         $("#title").textContent = info.title ?? "-";
         $("#publishedAt").textContent = fmtDate(info.published_at);
         $("#createdAt").textContent = fmtDate(info.created_at);
-        $("#domainId").textContent = info.domain_id ?? "-";
-        $("#domainPath").textContent = info.domain_id ? domainPath(info.domain_id, domainMap) : "-";
+        const domainIds = getDomainIds(info);
+        $("#domainId").textContent = domainIds.join(", ") || "-";
+        $("#domainPath").textContent = domainIds.length ? domainIds.map(id => domainPath(id, domainMap)).join("；") : "-";
 
         $("#importanceScore").textContent = String(info.importance_score ?? "-");
         $("#novelty").textContent = info.is_new_tech ? "新技术" : "已有技术";
@@ -506,6 +580,7 @@ Open: info_detail.html?id=INFO_CCUS_0001
         renderChips($("#infoTypes"), info.info_types);
         renderChips($("#tags"), info.tags);
 
+        $("#comment").textContent = info.comment ?? "-";
         $("#classification").textContent = info.classification ?? "-";
         $("#createdBy").textContent = info.created_by ?? "-";
         $("#reviewedBy").textContent = info.reviewed_by ?? "-";
@@ -603,12 +678,9 @@ Open: info_detail.html?id=INFO_CCUS_0001
         const from = getQueryParam("from") || "2025-12-01";
         const to = getQueryParam("to") || "2026-01-06";
         $("#btnGoTable").onclick = () => {
-          const q = new URLSearchParams({ domain_id: info.domain_id || "", from, to });
+          const domainIds = getDomainIds(info);
+          const q = new URLSearchParams({ domain_id: domainIds[0] || "", from, to });
           window.location.href = `info_table.html?${q.toString()}`;
-        };
-        $("#btnGoDashboard").onclick = () => {
-          const q = new URLSearchParams({ domain_id: info.domain_id || "", from, to });
-          window.location.href = `dashboard.html?${q.toString()}`;
         };
         $("#btnGoHome").onclick = () => {
           // If your CCUS L1 id differs, change here:
@@ -622,6 +694,54 @@ Open: info_detail.html?id=INFO_CCUS_0001
         });
         $("#btnSimDismiss")?.addEventListener("click", () => {
           alert("样机：已模拟解除（真实系统会写 manual_dismiss_reason + audit_logs）");
+        });
+
+        $("#btnManualAlert").addEventListener("click", () => {
+          $("#manualAlertTitle").textContent = info.title ?? "-";
+          $("#manualAlertTitleInput").value = alert?.alert_title || "";
+          $("#manualAlertBodyInput").value = alert?.alert_body || "";
+          $("#manualAlertColor").value = alert?.alert_color || "orange";
+          $("#manualDismissReason").value = "";
+          $("#manualAlertModal").style.display = "flex";
+        });
+
+        $("#btnCloseManual").addEventListener("click", () => {
+          $("#manualAlertModal").style.display = "none";
+        });
+
+        $("#btnSaveManual").addEventListener("click", () => {
+          const manualAlerts = JSON.parse(localStorage.getItem(manualKey) || "{}");
+          manualAlerts[id] = {
+            info_item_id: id,
+            alert_title: $("#manualAlertTitleInput").value.trim() || "人工预警",
+            alert_body: $("#manualAlertBodyInput").value.trim() || "人工补充说明",
+            alert_color: $("#manualAlertColor").value,
+            status: "active",
+            source: "manual",
+            manual_override: true
+          };
+          localStorage.setItem(manualKey, JSON.stringify(manualAlerts));
+          $("#manualAlertModal").style.display = "none";
+          window.location.reload();
+        });
+
+        $("#btnDismissManual").addEventListener("click", () => {
+          const reason = $("#manualDismissReason").value.trim();
+          if(!reason){
+            alert("请填写解除原因");
+            return;
+          }
+          const manualAlerts = JSON.parse(localStorage.getItem(manualKey) || "{}");
+          manualAlerts[id] = {
+            info_item_id: id,
+            status: "dismissed",
+            dismiss_reason: reason,
+            source: "manual",
+            manual_override: true
+          };
+          localStorage.setItem(manualKey, JSON.stringify(manualAlerts));
+          $("#manualAlertModal").style.display = "none";
+          window.location.reload();
         });
 
       }catch(err){

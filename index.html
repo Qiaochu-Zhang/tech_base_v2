@@ -218,11 +218,11 @@
     <div class="topbar-inner">
       <div class="brand">前沿技术情报与预警平台（样机） <span class="muted small">/ 分级汇总表</span></div>
       <div class="nav">
-        <a href="index.html">分级汇总表</a>
+        <a href="index.html">首页工作台</a>
         <a href="info_table.html">情报总表</a>
         <a href="upload_review.html">上传&复核</a>
-        <a href="dashboard.html">技术仪表盘</a>
-        <a href="literature.html">文献检索</a>
+        <a href="drafts.html">草稿管理</a>
+        <a href="excel_import.html">Excel 批量导入</a>
       </div>
     </div>
   </div>
@@ -240,19 +240,16 @@
           </div>
         </div>
         <div class="bd">
-          <div class="hint small muted">
-            说明：默认根目录=最上层（所有一级领域）。你也可以从下面树形列表选一个领域作为“根”，只统计该根的子树。
-          </div>
-
-          <label style="margin-top:12px;">根目录（树形选择，带 + 展开）</label>
-          <div class="pill" style="width:100%; justify-content:space-between;">
-            <span id="rootPathText" class="small">最上层（全部一级领域）</span>
-            <span id="rootIdText" class="mono small">ROOT</span>
-          </div>
-          <div id="rootTree" class="tree" style="margin-top:10px;"></div>
-
-          <label style="margin-top:12px;">时间范围</label>
+          <label>时间范围（自动刷新）</label>
           <div class="row">
+            <button class="btn" data-range="7">近 7 天</button>
+            <button class="btn" data-range="30">近 30 天</button>
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <button class="btn" data-range="365">近 365 天</button>
+            <button class="btn" data-range="custom">自定义</button>
+          </div>
+          <div class="row" style="margin-top:8px;">
             <div>
               <label>From</label>
               <input id="fromDate" type="date" />
@@ -263,20 +260,21 @@
             </div>
           </div>
 
+          <div class="hint small muted" style="margin-top:12px;">
+            说明：默认根目录=最上层（所有一级领域）。你也可以从下面树形列表选一个领域作为“根”，只统计该根的子树。
+          </div>
+
+          <label style="margin-top:12px;">根目录（树形选择，带 + 展开）</label>
+          <div class="pill" style="width:100%; justify-content:space-between;">
+            <span id="rootPathText" class="small">最上层（全部一级领域）</span>
+            <span id="rootIdText" class="mono small">ROOT</span>
+          </div>
+          <div id="rootTree" class="tree" style="margin-top:10px;"></div>
+
           <label style="margin-top:12px;">当前下钻路径</label>
           <div class="pill" style="width:100%; justify-content:space-between;">
             <span id="pathText" class="small">-</span>
             <span id="levelText" class="mono small">-</span>
-          </div>
-
-          <div class="row" style="margin-top:12px;">
-            <button class="btn" id="btnBack">返回上一级</button>
-            <button class="btn" id="btnResetToRoot">回到根目录</button>
-          </div>
-
-          <div class="row" style="margin-top:10px;">
-            <button class="btn" id="btnApply">应用筛选</button>
-            <button class="btn" id="btnGoInfoTable">查看所有情报</button>
           </div>
 
           <div class="muted small" style="margin-top:10px;">
@@ -320,6 +318,36 @@
             </div>
             <div class="expandBd">
               <div id="expandList" class="list"></div>
+            </div>
+          </div>
+
+          <div class="expandPanel" id="trendPanel">
+            <div class="expandHd">
+              <div>
+                <div style="font-weight:850;">趋势图面板</div>
+                <div class="muted small">可折叠，支持选择 X/Y 轴</div>
+              </div>
+              <button class="btn" id="btnToggleTrend" style="width:auto;">显示趋势图</button>
+            </div>
+            <div class="expandBd" id="trendBody" style="display:none;">
+              <div class="row">
+                <div>
+                  <label>X 轴</label>
+                  <select id="trendX">
+                    <option value="time">发布时间</option>
+                    <option value="importance">重要度</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Y 轴</label>
+                  <select id="trendY">
+                    <option value="count">情报数</option>
+                    <option value="avg_importance">平均重要度</option>
+                    <option value="indicator">指标值（示例）</option>
+                  </select>
+                </div>
+              </div>
+              <canvas id="trendCanvas" width="820" height="320" style="margin-top:12px; width:100%; border-radius:12px; border:1px solid rgba(255,255,255,.10); background:rgba(0,0,0,.12);"></canvas>
             </div>
           </div>
 
@@ -374,6 +402,15 @@
     return `${y}-${m}-${day}`;
   }
   function fmtDate(s){ return (s||"").slice(0,10); }
+  function getDomainIds(item){
+    if(Array.isArray(item.domain_ids) && item.domain_ids.length){
+      return item.domain_ids;
+    }
+    if(item.domain_id){
+      return [item.domain_id];
+    }
+    return [];
+  }
   function inRange(dateStr, from, to){
     const d = fmtDate(dateStr);
     if(!d) return false;
@@ -597,7 +634,7 @@
           <span>${fmtDate(it.published_at)}</span>
           <span>重要度 ${it.importance_score ?? "-"}</span>
           ${a ? `<span class="pill"><span class="dot ${dotClass(a.alert_color)}"></span> 预警${labelColor(a.alert_color)}</span>` : `<span class="muted">无预警</span>`}
-          <span class="muted">${domainPath(it.domain_id, domainMap)}</span>
+          <span class="muted">${getDomainIds(it).map(id => domainPath(id, domainMap)).join("；")}</span>
         </div>
       `;
       box.appendChild(el);
@@ -607,10 +644,11 @@
   // ---------------- main ----------------
   async function main(){
     try{
-      const [domains, infoItemsRaw, alertsRaw] = await Promise.all([
+      const [domains, infoItemsRaw, alertsRaw, indicatorValues] = await Promise.all([
         loadJson("./data/domains.json"),
         loadJson("./data/info_items.json"),
-        loadJson("./data/alerts.json")
+        loadJson("./data/alerts.json"),
+        loadJson("./data/indicator_values.json")
       ]);
 
       const domainMap = buildDomainMap(domains);
@@ -663,6 +701,10 @@
         return (CHILDREN.get(null) || []).map(d=>d.id);
       }
 
+      function isItemInSubtree(item, subtree){
+        return getDomainIds(item).some(id => subtree.has(id));
+      }
+
       function filterInfoItemsInRootRange(){
         const from = $("#fromDate").value;
         const to = $("#toDate").value;
@@ -672,7 +714,7 @@
         // only published & in date range & in root subtree
         return infoItemsRaw.filter(i =>
           i.status === "published" &&
-          rootSubtree.has(i.domain_id) &&
+          isItemInSubtree(i, rootSubtree) &&
           inRange(i.published_at, from, to)
         );
       }
@@ -697,7 +739,7 @@
         // total row = aggregated of current scope (root subtree or current subtree)
         const scopeSubtree = collectSubtreeIds(currentId ? currentId : (rootId ? rootId : null), domains);
 
-        const scopeItems = items.filter(i => scopeSubtree.has(i.domain_id));
+        const scopeItems = items.filter(i => isItemInSubtree(i, scopeSubtree));
         const scopeTech = scopeItems.filter(isTech);
         const scopePolicy = scopeItems.filter(isPolicy);
         const scopeActiveAlerts = scopeItems.filter(i => !!getActiveAlertByInfoId(i.id, alerts, to));
@@ -739,7 +781,7 @@
         // rows for each child domain
         for(const did of childIds){
           const subtree = collectSubtreeIds(did, domains);
-          const its = items.filter(i => subtree.has(i.domain_id));
+          const its = items.filter(i => isItemInSubtree(i, subtree));
           const tech = its.filter(isTech);
           const policy = its.filter(isPolicy);
           const activeAlerts = its.filter(i => !!getActiveAlertByInfoId(i.id, alerts, to));
@@ -772,7 +814,7 @@
             const targetDomainId = did ? did : (currentId ? currentId : (rootId ? rootId : null));
 
             const targetSubtree = collectSubtreeIds(targetDomainId, domains);
-            const scopeItems2 = items.filter(i => targetSubtree.has(i.domain_id));
+            const scopeItems2 = items.filter(i => isItemInSubtree(i, targetSubtree));
             const sorted = sortByImportanceThenTime(scopeItems2);
 
             const t = (kind==="alert")
@@ -784,98 +826,149 @@
         });
       }
 
-      $("#btnApply").addEventListener("click", ()=>{
-  // 作用：把日期范围应用到统计，并写入URL，重算表格/Top10
-  setQuery({ from: $("#fromDate").value, to: $("#toDate").value });
-  syncLeft();
-  renderTableAndResetExpand();
-});
-
-$("#btnResetToRoot").addEventListener("click", ()=>{
-  rootId = null;
-  currentId = null;
-  setQuery({ root_id: "", domain_id: "" });
-
-  $("#expandPanel").style.display = "none";
-  window.scrollTo({ top: 0, behavior: "smooth" });
-
-  renderRootTree(domains, domainMap, rootId, (newRootId)=>{
-    rootId = newRootId;
-    currentId = null;
-    setQuery({ root_id: rootId || "", domain_id: "" });
-    syncLeft();
-    renderTableAndResetExpand();
-  });
-
-  syncLeft();
-  renderTableAndResetExpand();
-});
-
-
-
-$("#btnBack").addEventListener("click", ()=>{
-  // 规则：
-  // 1) 如果已经在根视角（currentId=null），再点返回：把根也重置为ROOT（可选策略）
-  // 2) 如果 currentId 有值：返回到 parent；如果 parent 越过 root 边界，就回到根视角（currentId=null）
-
-  if(!currentId){
-    // ✅ 你要的“返回上一级”在根视角时怎么表现？
-    // 我建议：回到最上层 ROOT（让它一定有动作）
-    if(rootId){
-      rootId = null;
-      currentId = null;
-      setQuery({ root_id: "", domain_id: "" });
-      // 重新渲染树（因为root变了）
-      renderRootTree(domains, domainMap, rootId, (newRootId)=>{
-        rootId = newRootId;
-        currentId = null;
-        setQuery({ root_id: rootId || "", domain_id: "" });
-        syncLeft();
-        renderTableAndResetExpand();
-      });
-      syncLeft();
-      renderTableAndResetExpand();
-    }
-    return;
-  }
-
-  const cur = domainMap.get(currentId);
-  const parent = cur?.parent_id || null;
-
-  // parent 为空 -> 回到根视角
-  if(!parent){
-    currentId = null;
-  }else{
-    // 有 root 边界：如果 parent 不在 root 子树里，回到根视角
-    if(rootId && !isInSubtree(parent, rootId, domainMap)){
-      currentId = null;
-    }else{
-      currentId = parent;
-      // 如果 parent 正好等于 rootId，也回到根视角（因为根视角就是显示 root 的子域）
-      if(rootId && currentId === rootId) currentId = null;
-    }
-  }
-
-  setQuery({ domain_id: currentId || "" });
-  syncLeft();
-  renderTableAndResetExpand();
-});
-
-
-      $("#btnGoInfoTable").addEventListener("click", ()=>{
-        // go to info_table with current scope filters
-        const q = new URLSearchParams({
-          from: $("#fromDate").value,
-          to: $("#toDate").value
+      const rangeButtons = document.querySelectorAll("[data-range]");
+      rangeButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+          const val = btn.getAttribute("data-range");
+          if(val === "custom") return;
+          const days = Number(val);
+          $("#fromDate").value = daysAgoISO(days);
+          $("#toDate").value = todayISO();
+          setQuery({ from: $("#fromDate").value, to: $("#toDate").value });
+          syncLeft();
+          renderTableAndResetExpand();
+          renderTrendChart();
         });
-        if(rootId) q.set("root_id", rootId);
-        if(currentId) q.set("domain_id", currentId);
-        location.href = `info_table.html?${q.toString()}`;
       });
+
+      let debounceTimer = null;
+      ["fromDate", "toDate"].forEach(id => {
+        $(`#${id}`).addEventListener("input", () => {
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => {
+            setQuery({ from: $("#fromDate").value, to: $("#toDate").value });
+            syncLeft();
+            renderTableAndResetExpand();
+            renderTrendChart();
+          }, 300);
+        });
+      });
+
+      $("#btnToggleTrend").addEventListener("click", () => {
+        const body = $("#trendBody");
+        const isOpen = body.style.display === "block";
+        body.style.display = isOpen ? "none" : "block";
+        $("#btnToggleTrend").textContent = isOpen ? "显示趋势图" : "收起趋势图";
+        if(!isOpen){
+          renderTrendChart();
+          body.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
+
+      $("#trendX").addEventListener("change", renderTrendChart);
+      $("#trendY").addEventListener("change", renderTrendChart);
+
+      function renderTrendChart(){
+        const canvas = $("#trendCanvas");
+        const ctx = canvas.getContext("2d");
+        const xMode = $("#trendX").value;
+        const yMode = $("#trendY").value;
+        const from = $("#fromDate").value;
+        const to = $("#toDate").value;
+        const rootSubtree = collectSubtreeIds(rootId, domains);
+        const items = infoItemsRaw.filter(i =>
+          i.status === "published" &&
+          isItemInSubtree(i, rootSubtree) &&
+          inRange(i.published_at, from, to)
+        );
+
+        let points = [];
+        if(xMode === "time"){
+          const byDate = new Map();
+          items.forEach(item => {
+            const date = item.published_at;
+            if(!byDate.has(date)) byDate.set(date, []);
+            byDate.get(date).push(item);
+          });
+          const dates = Array.from(byDate.keys()).sort();
+          points = dates.map(date => {
+            const list = byDate.get(date);
+            if(yMode === "count"){
+              return { x: date, y: list.length };
+            }
+            if(yMode === "avg_importance"){
+              const avg = list.reduce((sum,i)=>sum + (i.importance_score || 0), 0) / list.length;
+              return { x: date, y: Number(avg.toFixed(2)) };
+            }
+            const vals = list.flatMap(i => indicatorValues.filter(v => v.info_item_id === i.id && typeof v.value_number === "number"));
+            const avg = vals.length ? vals.reduce((sum,v)=>sum+v.value_number,0) / vals.length : 0;
+            return { x: date, y: Number(avg.toFixed(2)) };
+          });
+        } else {
+          const buckets = [1,2,3,4,5];
+          points = buckets.map(level => {
+            const list = items.filter(i => (i.importance_score || 0) === level);
+            if(yMode === "count"){
+              return { x: level, y: list.length };
+            }
+            if(yMode === "avg_importance"){
+              return { x: level, y: list.length ? level : 0 };
+            }
+            const vals = list.flatMap(i => indicatorValues.filter(v => v.info_item_id === i.id && typeof v.value_number === "number"));
+            const avg = vals.length ? vals.reduce((sum,v)=>sum+v.value_number,0) / vals.length : 0;
+            return { x: level, y: Number(avg.toFixed(2)) };
+          });
+        }
+
+        const padding = 40;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = "rgba(255,255,255,.2)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(padding, padding);
+        ctx.lineTo(padding, canvas.height - padding);
+        ctx.lineTo(canvas.width - padding, canvas.height - padding);
+        ctx.stroke();
+
+        if(points.length === 0){
+          ctx.fillStyle = "rgba(255,255,255,.6)";
+          ctx.fillText("无数据", canvas.width / 2 - 20, canvas.height / 2);
+          return;
+        }
+
+        const maxY = Math.max(...points.map(p => p.y)) || 1;
+        const minY = Math.min(...points.map(p => p.y));
+        const xStep = (canvas.width - padding * 2) / Math.max(points.length - 1, 1);
+        const mapY = y => {
+          const range = maxY - minY || 1;
+          return canvas.height - padding - ((y - minY) / range) * (canvas.height - padding * 2);
+        };
+
+        ctx.strokeStyle = "#9ad2ff";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        points.forEach((p, idx) => {
+          const x = padding + idx * xStep;
+          const y = mapY(p.y);
+          if(idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        ctx.fillStyle = "#9ad2ff";
+        points.forEach((p, idx) => {
+          const x = padding + idx * xStep;
+          const y = mapY(p.y);
+          ctx.beginPath();
+          ctx.arc(x, y, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillText(String(p.y), x - 6, y - 8);
+        });
+      }
 
       // initial sync & render
       syncLeft();
       renderTableAndResetExpand();
+      renderTrendChart();
 
     }catch(err){
       $("#errorBox").style.display = "";
