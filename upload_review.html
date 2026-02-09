@@ -352,14 +352,10 @@
       }
     });
 
-    const expanded = new Set(roots.map(r => r.id));
+    const expanded = new Set();
 
     function render(){
       container.innerHTML = "";
-      if(roots.length === 0){
-        container.innerHTML = "<div class=\"muted small\">暂无领域数据</div>";
-        return;
-      }
       const renderNode = (node, depth) => {
         const row = document.createElement("div");
         row.className = "tree-row";
@@ -612,7 +608,7 @@
 
     createChips("sourceChips", ["产业新闻", "学术文献", "报告发布", "政策", "企业公告"]);
     createChips("typeChips", ["技术", "市场", "政策", "项目", "投融资"]);
-    buildTree(domains || [], $("#domainTree"));
+    buildTree(domains, $("#domainTree"));
 
     const today = new Date();
     $("#published_at").value = today.toISOString().slice(0,10);

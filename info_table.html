@@ -428,25 +428,6 @@
       return arr.reverse().join(" / ");
     }
 
-    function collectSubtreeIds(rootId){
-      if(!rootId) return new Set();
-      const children = new Map();
-      domains.forEach(d => {
-        const parent = d.parent_id || null;
-        if(!children.has(parent)) children.set(parent, []);
-        children.get(parent).push(d.id);
-      });
-      const out = new Set();
-      const stack = [rootId];
-      while(stack.length){
-        const cur = stack.pop();
-        if(out.has(cur)) continue;
-        out.add(cur);
-        (children.get(cur) || []).forEach(id => stack.push(id));
-      }
-      return out;
-    }
-
     function hasActiveAlert(infoId){
       const manual = manualAlerts[infoId];
       if(manual && manual.status === "active") return manual;
@@ -589,28 +570,24 @@
       const keyword = $("#keyword").value.trim();
       const sortBy = $("#sortBy").value;
       const pageSize = parseInt($("#pageSize").value, 10);
-      const sources = collectChipValues("sourceChips").map(s => s.trim());
-      const types = collectChipValues("typeChips").map(t => t.trim());
+      const sources = collectChipValues("sourceChips");
+      const types = collectChipValues("typeChips");
       const importanceMin = $("#importanceMin").value ? Number($("#importanceMin").value) : null;
       const importanceMax = $("#importanceMax").value ? Number($("#importanceMax").value) : null;
-      const domainScope = domainId ? collectSubtreeIds(domainId) : null;
 
       const filtered = infos.filter(info => {
         if(!inDateRange(info.published_at, from, to)) return false;
         if(domainId){
           const ids = getDomainsForInfo(info);
-          const inScope = ids.some(id => domainScope.has(id));
-          if(!inScope) return false;
+          if(!ids.includes(domainId)) return false;
         }
         if(newTech){
           if(String(info.is_new_tech) !== newTech) return false;
         }
         if(importanceMin !== null && info.importance_score < importanceMin) return false;
         if(importanceMax !== null && info.importance_score > importanceMax) return false;
-        const infoSources = (info.source_types || []).map(s => s.trim());
-        const infoTypes = (info.info_types || []).map(t => t.trim());
-        if(sources.length && !infoSources.some(s => sources.includes(s))) return false;
-        if(types.length && !infoTypes.some(t => types.includes(t))) return false;
+        if(sources.length && !(info.source_types || []).some(s => sources.includes(s))) return false;
+        if(types.length && !(info.info_types || []).some(t => types.includes(t))) return false;
         const commentText = (info.comment || "").trim();
         if(commentFilter === "true" && !commentText) return false;
         if(commentFilter === "false" && commentText) return false;
