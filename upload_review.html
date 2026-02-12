@@ -122,7 +122,10 @@
     .modal .box .bd{ padding:14px; }
 
     .tree{ border:1px solid rgba(255,255,255,.10); background:rgba(0,0,0,.10); border-radius:12px; padding:8px; max-height: 260px; overflow:auto; }
-    .tree-row{ display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:10px; }
+    .tree-row{ display:flex; align-items:center; gap:6px; width: 100%; padding:6px 8px; border-radius:10px; }
+    .tree{ min-height: 160px;}
+    .tree-node{min-width: 120px;   /* 防止被 flex 挤成 0 */}
+
     .tree-row:hover{ background:rgba(255,255,255,.06); }
     .tree-toggle{ width:22px; height:22px; display:inline-flex; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,.12); border-radius:8px; background:rgba(255,255,255,.05); cursor:pointer; user-select:none; font-family: var(--mono); font-size:12px; }
     .tree-toggle.empty{ opacity:.25; cursor:default; }
@@ -305,6 +308,7 @@
   }
 
   const state = {
+    indicatorDefs: [],
     domains: [],
     indicators: [],
     aiShouldAlert: false,
@@ -379,18 +383,41 @@
         }
         row.appendChild(toggle);
 
+        const isLeaf = node.children.length === 0;
+
+        // checkbox
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.value = node.id;
-        checkbox.style.margin = "0 6px 0 0";
+
+        // 父节点禁用选择（也可以直接不渲染 checkbox，见下方可选方案）
+        if(!isLeaf){
+          checkbox.disabled = true;
+          checkbox.style.opacity = "0";        // 隐藏但占位，行对齐不乱
+          checkbox.style.pointerEvents = "none";
+        } else {
+          checkbox.disabled = false;
+        }
+
         row.appendChild(checkbox);
 
+        // label
         const nodeLabel = document.createElement("div");
         nodeLabel.className = "tree-node";
         nodeLabel.textContent = node.name;
+
         nodeLabel.addEventListener("click", () => {
-          checkbox.checked = !checkbox.checked;
+          if(isLeaf){
+            checkbox.checked = !checkbox.checked;   // 只有叶子节点才勾选
+          } else {
+            // 父节点点击 = 展开/收起（更符合直觉）
+            if(node.children.length > 0){
+              expanded.has(node.id) ? expanded.delete(node.id) : expanded.add(node.id);
+              render();
+            }
+          }
         });
+
         row.appendChild(nodeLabel);
 
         container.appendChild(row);
@@ -449,7 +476,7 @@
     state.indicators.forEach((ind, idx) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${escapeHtml(ind.name)}</td>
+        <td><input data-idx="${idx}" data-field="name" value="${escapeHtml(ind.name)}" /></td>
         <td><input data-idx="${idx}" data-field="value" value="${ind.value}" /></td>
         <td><input data-idx="${idx}" data-field="unit" value="${ind.unit}" /></td>
         <td><input data-idx="${idx}" data-field="keep" type="checkbox" ${ind.keep ? "checked" : ""} /></td>
@@ -467,6 +494,8 @@
           state.indicators[idx].value = e.target.value;
         } else if(field === "unit"){
           state.indicators[idx].unit = e.target.value;
+        } else if(field === "name"){
+          state.indicators[idx].name = e.target.value;   // 👈 就加这一行
         }
       });
     });
@@ -478,28 +507,142 @@
     $("#aiAlertReason").textContent = state.aiReasons.join("、") || "-";
   }
 
-  function runAiSuggestion(form){
-    const content = `${form.title} ${form.content}`.toLowerCase();
-    const indicators = [];
-    if(content.includes("能耗") || content.includes("能量")){
-      indicators.push({ name: "再生能耗", value: "2.5", unit: "GJ/tCO2", keep: true });
-    }
-    if(content.includes("容量") || content.includes("吸附")){
-      indicators.push({ name: "工作容量", value: "2.0", unit: "mmol_CO2/g", keep: true });
-    }
-    if(indicators.length === 0){
-      indicators.push({ name: "示例指标", value: "" , unit: "", keep: true });
+    // 统计一段字符串里中文字符数量
+    function countChinese(s){
+      const m = s.match(/[\u4e00-\u9fff]/g);
+      return m ? m.length : 0;
     }
 
-    state.indicators = indicators;
-    state.aiShouldAlert = form.is_new_tech || form.importance_score >= 4;
-    state.aiReasons = [];
-    if(form.is_new_tech) state.aiReasons.push("新技术");
-    if(form.importance_score >= 4) state.aiReasons.push("重要度较高");
-    state.manualAlert = false;
-    updateAlertDisplay();
-    renderIndicators();
+    // 在 numberStartIdx 前面，向左截取“包含最多 N 个中文字符”的窗口（返回窗口字符串）
+    function getPrevChineseWindow(text, numberStartIdx, nChinese=10){
+      let i = numberStartIdx - 1;
+      let chinese = 0;
+      while(i >= 0 && chinese < nChinese){
+        const ch = text[i];
+        if(/[\u4e00-\u9fff]/.test(ch)) chinese++;
+        i--;
+      }
+      // i 停在窗口左侧边界之外一位
+      return text.slice(Math.max(0, i+1), numberStartIdx);
+    }
+
+    // 尝试从数字后面提取单位（可选；失败就用默认单位）
+    function sniffUnit(text, numberEndIdx){
+      // 取数字后面 12 个字符（含空格）
+      const tail = text.slice(numberEndIdx, numberEndIdx + 12);
+      // 去掉空格
+      const t = tail.replace(/\s+/g, "");
+      // 粗略匹配：连续的字母/符号/%/_/²/³/°/·/-
+      const m = t.match(/^([a-zA-Z%_\/\-\.\u00B2\u00B3\u00B0\u00B7]+(?:\([^\)]*\))?)/);
+      return m ? m[1] : "";
+    }
+
+    // 核心：从正文里抽取 “指标名 + 数字” 候选
+    function extractIndicatorsFromText(text, indicatorDefs){
+      const resultsById = new Map(); // 每个指标保留一个“最近”候选
+      if(!text || !indicatorDefs?.length) return [];
+
+      // 数字 regex：支持 12, 12.3, 1e-3, 12%, 12.3%
+      const numRe = /(-?\d+(?:\.\d+)?(?:e[+\-]?\d+)?)(%?)/ig;
+
+      let m;
+      while((m = numRe.exec(text)) !== null){
+        const rawNum = m[1];
+        const percent = m[2] || "";
+        const numStart = m.index;
+        const numEnd = numRe.lastIndex;
+
+        // 前置窗口：数字前最多 10 个中文字符
+        const win = getPrevChineseWindow(text, numStart, 10);
+
+        // 在窗口里找“出现过的指标名”，选离数字最近的那个
+        let best = null; // {def, distChinese, posEnd}
+        for(const def of indicatorDefs){
+          const name = def.name;
+          const pos = win.lastIndexOf(name);
+          if(pos === -1) continue;
+
+          const nameEndInWin = pos + name.length;
+          const between = win.slice(nameEndInWin);     // name 到数字之间的子串
+          const distChinese = countChinese(between);   // 用“中文字符距离”衡量
+          // 因为 win 本身最多 10 个中文，所以 distChinese <= 10 才会进来
+          if(best === null || distChinese < best.distChinese){
+            best = { def, distChinese };
+          }
+        }
+
+        if(!best) continue;
+
+        // 组装候选
+        const def = best.def;
+        const unitGuess = percent ? "%" : sniffUnit(text, numEnd);
+        const unit = unitGuess || def.unit_default || "";
+        const value = rawNum + percent;
+
+        // 如果同一指标出现多次，保留“更近”的（distChinese 更小），或保留第一次也行
+        const prev = resultsById.get(def.id);
+        if(!prev || best.distChinese < prev._distChinese){
+          resultsById.set(def.id, {
+            id: def.id,
+            name: def.name,          // 这会进表格，用户可改名
+            value,
+            unit,
+            keep: true,
+            _distChinese: best.distChinese
+          });
+        }
+      }
+
+      // 输出时去掉内部字段
+      return Array.from(resultsById.values()).map(x => {
+        const { _distChinese, ...rest } = x;
+        return rest;
+      });
+    }
+
+
+
+  function runAiSuggestion(form){
+  // 1) 先从正文抽取指标
+  const text = `${form.title} ${form.content}`;
+  let indicators = extractIndicatorsFromText(text, state.indicatorDefs);
+
+  // 2) 如果一个都没抽到，给个兜底示例（避免表格空）
+  if(indicators.length === 0){
+    indicators = [{ name: "示例指标", value: "" , unit: "", keep: true }];
+  } else {
+    // 兼容你现有表格渲染（它只用 name/value/unit/keep）
+    indicators = indicators.map(x => ({ name: x.name, value: x.value, unit: x.unit, keep: true }));
   }
+
+  state.indicators = indicators;
+
+  // 3) 预警建议：仍沿用你原来的逻辑 + 给一段“原因评论”
+  state.aiShouldAlert = form.is_new_tech || form.importance_score >= 4;
+  state.aiReasons = [];
+  if(form.is_new_tech) state.aiReasons.push("新技术");
+  if(form.importance_score >= 4) state.aiReasons.push("重要度较高");
+  if(indicators.length && indicators[0].name !== "示例指标") state.aiReasons.push("正文包含关键指标数值");
+
+  state.manualAlert = false;
+
+  updateAlertDisplay();
+  renderIndicators();
+
+  // 4) 如果建议预警，自动填一段原因（用户可改）
+  if(state.aiShouldAlert){
+    const kept = state.indicators.filter(i => i.keep).slice(0,3)
+      .map(i => `${i.name}=${i.value}${i.unit}`).join("；");
+
+    // 预警字段自动填充（不会锁死，用户可改）
+    $("#alert_title").value = $("#alert_title").value.trim() || `关注：${form.title.slice(0,18)}`;
+    $("#alert_body").value  = $("#alert_body").value.trim()  || `建议关注该情报的关键指标与落地进展（${kept || "正文提取到指标数值"}）。`;
+    $("#reviewer_comment").value = $("#reviewer_comment").value.trim() ||
+      `AI建议预警：${state.aiReasons.join("、")}。` +
+      (kept ? `已从正文抽取到指标：${kept}。` : `正文未稳定抽取单位，建议人工核对指标名/单位。`) +
+      `建议后续跟踪：指标口径一致性、样机/中试数据、成本与能耗、竞品对比与风险点。`;
+  }
+}
 
   function alertRequired(){
     return state.aiShouldAlert || state.manualAlert;
@@ -600,9 +743,13 @@
   });
 
   async function main(){
-    const [domains] = await Promise.all([
-      loadJson("./data/domains.json")
+    const [domains, indicatorDefs] = await Promise.all([
+      loadJson("./data/domains.json"),
+      loadJson("./data/indicator_defs.json")
     ]);
+
+    state.domains = domains;
+    state.indicatorDefs = (indicatorDefs || []).filter(x => x.is_active);
 
     state.domains = domains;
 

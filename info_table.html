@@ -351,8 +351,10 @@
   }
 
   function inDateRange(date, from, to){
-    if(from && date < from) return false;
-    if(to && date > to) return false;
+    if(!date) return !(from || to); // 没日期时，只有在没筛选范围时才通过
+    const d = date.slice(0,10);
+    if(from && d < from) return false;
+    if(to && d > to) return false;
     return true;
   }
 
@@ -360,21 +362,32 @@
     return Array.from(document.querySelectorAll(`#${containerId} .chip.on`)).map(ch => ch.dataset.value);
   }
 
-  function createChips(containerId, values){
-    const box = document.getElementById(containerId);
-    box.innerHTML = "";
-    values.forEach(val => {
-      const chip = document.createElement("div");
-      chip.className = "chip";
-      chip.dataset.value = val;
-      chip.textContent = val;
-      chip.addEventListener("click", () => {
-        chip.classList.toggle("on");
-        render();
-      });
-      box.appendChild(chip);
+  function createChips(containerId, values, onChange){
+  const box = document.getElementById(containerId);
+  box.innerHTML = "";
+
+  values.forEach(val => {
+    const chip = document.createElement("div");
+    chip.className = "chip";
+    chip.dataset.value = val;
+    chip.textContent = val;
+    box.appendChild(chip);
+  });
+
+  // 事件委托：只绑一次
+  if(!box.dataset.bound){
+    box.dataset.bound = "1";
+    box.addEventListener("click", (e) => {
+      const chip = e.target.closest(".chip");
+      if(!chip || !box.contains(chip)) return;
+      chip.classList.toggle("on");
+      if(typeof onChange === "function") onChange();
     });
   }
+
+  // 每次更新回调引用（避免闭包旧 render）
+  box.__onChange = onChange;
+}
 
   function highlightSnippet(text, keyword, maxLen){
     const safeText = escapeHtml(text || "");
@@ -416,6 +429,32 @@
     ]);
 
     const domainMap = Object.fromEntries(domains.map(d=>[d.id,d]));
+
+
+
+    // 1) 构建 parent -> children 映射
+    const childrenMap = {};
+    domains.forEach(d => {
+      const p = d.parent_id || "__root__";
+      (childrenMap[p] ||= []).push(d.id);
+    });
+
+    // 2) 获取某个 domainId 的所有子孙（含自己）
+    function getDescendants(domainId){
+      const out = new Set();
+      const stack = [domainId];
+      while(stack.length){
+        const cur = stack.pop();
+        if(out.has(cur)) continue;
+        out.add(cur);
+        const kids = childrenMap[cur] || [];
+        kids.forEach(k => stack.push(k));
+      }
+      return out;
+    }
+
+
+    
     const manualAlerts = loadManualAlerts();
 
     function domainPath(id){
@@ -437,8 +476,8 @@
     const uniqueSources = Array.from(new Set(infos.flatMap(i => i.source_types || [])));
     const uniqueTypes = Array.from(new Set(infos.flatMap(i => i.info_types || [])));
 
-    createChips("sourceChips", uniqueSources);
-    createChips("typeChips", uniqueTypes);
+    createChips("sourceChips", uniqueSources, render);
+    createChips("typeChips", uniqueTypes, render);
 
     const domainSelect = $("#domainFilter");
     domains.forEach(d => {
@@ -576,10 +615,12 @@
       const importanceMax = $("#importanceMax").value ? Number($("#importanceMax").value) : null;
 
       const filtered = infos.filter(info => {
+        if(info.status && info.status !== "published") return false;
         if(!inDateRange(info.published_at, from, to)) return false;
         if(domainId){
+          const allowed = getDescendants(domainId); // 父域 + 所有子孙
           const ids = getDomainsForInfo(info);
-          if(!ids.includes(domainId)) return false;
+          if(!ids.some(id => allowed.has(id))) return false;
         }
         if(newTech){
           if(String(info.is_new_tech) !== newTech) return false;
