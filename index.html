@@ -410,6 +410,12 @@
     if(item.domain_id){
       return [item.domain_id];
     }
+    if(Array.isArray(item.domains) && item.domains.length){
+      return item.domains;
+    }
+    if(typeof item.domains === "string" && item.domains.trim()){
+      return item.domains.split(";").map(s => s.trim()).filter(Boolean);
+    }
     return [];
   }
   function inRange(dateStr, from, to){
@@ -682,8 +688,8 @@
       let currentId = qp("domain_id") || null;
 
       // init dates
-      $("#fromDate").value = qp("from") || daysAgoISO(30);
-      $("#toDate").value = qp("to") || todayISO();
+      $("#fromDate").value = qp("from") || "";
+      $("#toDate").value = qp("to") || "";
 
       function syncLeft(){
         $("#rootPathText").textContent = domainPath(rootId, domainMap);

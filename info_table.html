@@ -443,6 +443,12 @@
     if(info.domain_id){
       return [info.domain_id];
     }
+    if(Array.isArray(info.domains) && info.domains.length){
+      return info.domains;
+    }
+    if(typeof info.domains === "string" && info.domains.trim()){
+      return info.domains.split(";").map(s => s.trim()).filter(Boolean);
+    }
     return [];
   }
 
