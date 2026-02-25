@@ -333,6 +333,7 @@
   const escapeHtml = str => str.replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
 
   const manualStorageKey = "manualAlerts";
+  const publishedKey = "published_items";
   const loadManualAlerts = () => JSON.parse(localStorage.getItem(manualStorageKey) || "{}");
   const saveManualAlerts = data => localStorage.setItem(manualStorageKey, JSON.stringify(data));
 
@@ -348,6 +349,15 @@
   async function loadJson(p){
     const r = await fetch(p, { cache: "no-store" });
     return await r.json();
+  }
+
+  function loadLocalPublished(){
+    try{
+      const list = JSON.parse(localStorage.getItem(publishedKey) || "[]");
+      return Array.isArray(list) ? list.filter(i => i && i.status === "published") : [];
+    } catch {
+      return [];
+    }
   }
 
   function inDateRange(date, from, to){
@@ -422,11 +432,23 @@
   }
 
   async function main(){
-    const [infos, alerts, domains] = await Promise.all([
+    let [infos, alerts, domains] = await Promise.all([
       loadJson("./data/info_items.json"),
       loadJson("./data/alerts.json"),
       loadJson("./data/domains.json")
     ]);
+
+    const localPublished = loadLocalPublished();
+    if(localPublished.length){
+      const map = new Map();
+      infos.forEach(item => {
+        if(item && item.id) map.set(item.id, item);
+      });
+      localPublished.forEach(item => {
+        if(item && item.id) map.set(item.id, item);
+      });
+      infos = Array.from(map.values());
+    }
 
     const domainMap = Object.fromEntries(domains.map(d=>[d.id,d]));
 

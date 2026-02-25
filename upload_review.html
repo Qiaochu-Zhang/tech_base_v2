@@ -299,6 +299,7 @@
 <script type="module">
   const $ = s => document.querySelector(s);
   const draftKey = "drafts";
+  const publishedKey = "published_items";
 
   const escapeHtml = str => str.replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
 
@@ -313,7 +314,8 @@
     indicators: [],
     aiShouldAlert: false,
     aiReasons: [],
-    manualAlert: false
+    manualAlert: false,
+    currentDraftId: null
   };
 
   function showWarn(msg){
@@ -656,12 +658,25 @@
     return "";
   }
 
-  function saveDraft(){
+  function upsertDraft(status){
     const form = getForm();
     const now = new Date().toISOString();
     const list = JSON.parse(localStorage.getItem(draftKey) || "[]");
-    list.unshift({ id: `DRAFT_${Date.now()}`, ...form, created_at: now, status: "draft" });
+    let id = state.currentDraftId;
+    if(!id){
+      id = `DRAFT_${Date.now()}`;
+      state.currentDraftId = id;
+    }
+    const idx = list.findIndex(item => item.id === id);
+    const createdAt = idx >= 0 ? list[idx].created_at : now;
+    const payload = { id, ...form, created_at: createdAt, updated_at: now, status };
+    if(idx >= 0){
+      list[idx] = payload;
+    } else {
+      list.unshift(payload);
+    }
     localStorage.setItem(draftKey, JSON.stringify(list));
+    return payload;
   }
 
   function showPreview(){
@@ -693,7 +708,7 @@
       showWarn(error);
       return;
     }
-    saveDraft();
+    upsertDraft("draft");
     alert("草稿已保存到本地");
   });
 
@@ -705,6 +720,7 @@
       showWarn(error);
       return;
     }
+    upsertDraft("ai_suggested");
     runAiSuggestion(form);
     $("#aiPanel").style.display = "block";
     window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
@@ -739,6 +755,21 @@
       showWarn(error);
       return;
     }
+    const now = new Date().toISOString();
+    const infoId = state.currentDraftId || `INFO_${Date.now()}`;
+    const list = JSON.parse(localStorage.getItem(publishedKey) || "[]");
+    const idx = list.findIndex(item => item.id === infoId);
+    const createdAt = idx >= 0 ? list[idx].created_at : now;
+    const payload = { id: infoId, ...form, created_at: createdAt, updated_at: now, status: "published" };
+    if(idx >= 0){
+      list[idx] = payload;
+    } else {
+      list.unshift(payload);
+    }
+    localStorage.setItem(publishedKey, JSON.stringify(list));
+    const drafts = JSON.parse(localStorage.getItem(draftKey) || "[]");
+    const filtered = drafts.filter(item => item.id !== state.currentDraftId);
+    localStorage.setItem(draftKey, JSON.stringify(filtered));
     alert("发布成功（样机：仅演示流程）");
   });
 
@@ -764,6 +795,7 @@
     if(draftPayload){
       const draft = JSON.parse(draftPayload);
       localStorage.removeItem("currentDraft");
+      state.currentDraftId = draft.id || null;
       $("#title").value = draft.title || "";
       $("#published_at").value = draft.published_at || $("#published_at").value;
       $("#content").value = draft.content || "";
