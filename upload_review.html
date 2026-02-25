@@ -297,6 +297,8 @@
 </div>
 
 <script type="module">
+  import { extractIndicators } from "./lib/extractor.js";
+
   const $ = s => document.querySelector(s);
   const draftKey = "drafts";
   const publishedKey = "published_items";
@@ -466,6 +468,13 @@
     return "";
   }
 
+  function validatePublishRequired(form){
+    if(!form.title) return "标题必填";
+    if(!form.content) return "正文必填";
+    if(form.domain_ids.length === 0) return "至少选择一个领域";
+    return "";
+  }
+
   function renderIndicators(){
     const tbody = $("#indicatorBody");
     tbody.innerHTML = "";
@@ -509,114 +518,15 @@
     $("#aiAlertReason").textContent = state.aiReasons.join("、") || "-";
   }
 
-    // 统计一段字符串里中文字符数量
-    function countChinese(s){
-      const m = s.match(/[\u4e00-\u9fff]/g);
-      return m ? m.length : 0;
-    }
-
-    // 在 numberStartIdx 前面，向左截取“包含最多 N 个中文字符”的窗口（返回窗口字符串）
-    function getPrevChineseWindow(text, numberStartIdx, nChinese=10){
-      let i = numberStartIdx - 1;
-      let chinese = 0;
-      while(i >= 0 && chinese < nChinese){
-        const ch = text[i];
-        if(/[\u4e00-\u9fff]/.test(ch)) chinese++;
-        i--;
-      }
-      // i 停在窗口左侧边界之外一位
-      return text.slice(Math.max(0, i+1), numberStartIdx);
-    }
-
-    // 尝试从数字后面提取单位（可选；失败就用默认单位）
-    function sniffUnit(text, numberEndIdx){
-      // 取数字后面 12 个字符（含空格）
-      const tail = text.slice(numberEndIdx, numberEndIdx + 12);
-      // 去掉空格
-      const t = tail.replace(/\s+/g, "");
-      // 粗略匹配：连续的字母/符号/%/_/²/³/°/·/-
-      const m = t.match(/^([a-zA-Z%_\/\-\.\u00B2\u00B3\u00B0\u00B7]+(?:\([^\)]*\))?)/);
-      return m ? m[1] : "";
-    }
-
-    // 核心：从正文里抽取 “指标名 + 数字” 候选
-    function extractIndicatorsFromText(text, indicatorDefs){
-      const resultsById = new Map(); // 每个指标保留一个“最近”候选
-      if(!text || !indicatorDefs?.length) return [];
-
-      // 数字 regex：支持 12, 12.3, 1e-3, 12%, 12.3%
-      const numRe = /(-?\d+(?:\.\d+)?(?:e[+\-]?\d+)?)(%?)/ig;
-
-      let m;
-      while((m = numRe.exec(text)) !== null){
-        const rawNum = m[1];
-        const percent = m[2] || "";
-        const numStart = m.index;
-        const numEnd = numRe.lastIndex;
-
-        // 前置窗口：数字前最多 10 个中文字符
-        const win = getPrevChineseWindow(text, numStart, 10);
-
-        // 在窗口里找“出现过的指标名”，选离数字最近的那个
-        let best = null; // {def, distChinese, posEnd}
-        for(const def of indicatorDefs){
-          const name = def.name;
-          const pos = win.lastIndexOf(name);
-          if(pos === -1) continue;
-
-          const nameEndInWin = pos + name.length;
-          const between = win.slice(nameEndInWin);     // name 到数字之间的子串
-          const distChinese = countChinese(between);   // 用“中文字符距离”衡量
-          // 因为 win 本身最多 10 个中文，所以 distChinese <= 10 才会进来
-          if(best === null || distChinese < best.distChinese){
-            best = { def, distChinese };
-          }
-        }
-
-        if(!best) continue;
-
-        // 组装候选
-        const def = best.def;
-        const unitGuess = percent ? "%" : sniffUnit(text, numEnd);
-        const unit = unitGuess || def.unit_default || "";
-        const value = rawNum + percent;
-
-        // 如果同一指标出现多次，保留“更近”的（distChinese 更小），或保留第一次也行
-        const prev = resultsById.get(def.id);
-        if(!prev || best.distChinese < prev._distChinese){
-          resultsById.set(def.id, {
-            id: def.id,
-            name: def.name,          // 这会进表格，用户可改名
-            value,
-            unit,
-            keep: true,
-            _distChinese: best.distChinese
-          });
-        }
-      }
-
-      // 输出时去掉内部字段
-      return Array.from(resultsById.values()).map(x => {
-        const { _distChinese, ...rest } = x;
-        return rest;
-      });
-    }
-
-
-
   function runAiSuggestion(form){
-  // 1) 先从正文抽取指标
   const text = `${form.title} ${form.content}`;
-  let indicators = extractIndicatorsFromText(text, state.indicatorDefs);
-
-  // 2) 如果一个都没抽到，给个兜底示例（避免表格空）
-  if(indicators.length === 0){
-    indicators = [{ name: "示例指标", value: "" , unit: "", keep: true }];
-  } else {
-    // 兼容你现有表格渲染（它只用 name/value/unit/keep）
-    indicators = indicators.map(x => ({ name: x.name, value: x.value, unit: x.unit, keep: true }));
-  }
-
+  const suggestions = extractIndicators(text, state.indicatorDefs);
+  const indicators = suggestions.map(x => ({
+    name: x.name,
+    value: x.suggested_value,
+    unit: x.unit_default || "",
+    keep: true
+  }));
   state.indicators = indicators;
 
   // 3) 预警建议：仍沿用你原来的逻辑 + 给一段“原因评论”
@@ -624,7 +534,7 @@
   state.aiReasons = [];
   if(form.is_new_tech) state.aiReasons.push("新技术");
   if(form.importance_score >= 4) state.aiReasons.push("重要度较高");
-  if(indicators.length && indicators[0].name !== "示例指标") state.aiReasons.push("正文包含关键指标数值");
+  if(indicators.length) state.aiReasons.push("正文包含关键指标数值");
 
   state.manualAlert = false;
 
@@ -641,7 +551,7 @@
     $("#alert_body").value  = $("#alert_body").value.trim()  || `建议关注该情报的关键指标与落地进展（${kept || "正文提取到指标数值"}）。`;
     $("#reviewer_comment").value = $("#reviewer_comment").value.trim() ||
       `AI建议预警：${state.aiReasons.join("、")}。` +
-      (kept ? `已从正文抽取到指标：${kept}。` : `正文未稳定抽取单位，建议人工核对指标名/单位。`) +
+      (kept ? `已从正文抽取到指标：${kept}。` : `正文未匹配到指标，建议人工补充。`) +
       `建议后续跟踪：指标口径一致性、样机/中试数据、成本与能耗、竞品对比与风险点。`;
   }
 }
@@ -655,6 +565,19 @@
     if(!$("#alert_title").value.trim()) return "预警标题必填";
     if(!$("#alert_body").value.trim()) return "预警内容必填";
     if(!$("#reviewer_comment").value.trim()) return "reviewer_comment 必填";
+    return "";
+  }
+
+  function validateAction(form, action){
+    if(action === "publish"){
+      return validatePublishRequired(form) || validateAlert();
+    }
+    if(action === "preview"){
+      return validateBase(form) || validateAlert();
+    }
+    if(action === "submit" || action === "save_draft"){
+      return validateBase(form);
+    }
     return "";
   }
 
@@ -703,7 +626,7 @@
   $("#btnSaveDraft").addEventListener("click", () => {
     clearWarn();
     const form = getForm();
-    const error = validateBase(form);
+    const error = validateAction(form, "save_draft");
     if(error){
       showWarn(error);
       return;
@@ -715,7 +638,7 @@
   $("#btnSubmit").addEventListener("click", () => {
     clearWarn();
     const form = getForm();
-    const error = validateBase(form);
+    const error = validateAction(form, "submit");
     if(error){
       showWarn(error);
       return;
@@ -739,7 +662,7 @@
   $("#btnPreview").addEventListener("click", () => {
     clearWarn();
     const form = getForm();
-    const error = validateBase(form) || validateAlert();
+    const error = validateAction(form, "preview");
     if(error){
       showWarn(error);
       return;
@@ -750,7 +673,7 @@
   $("#btnPublish").addEventListener("click", () => {
     clearWarn();
     const form = getForm();
-    const error = validateBase(form) || validateAlert();
+    const error = validateAction(form, "publish");
     if(error){
       showWarn(error);
       return;

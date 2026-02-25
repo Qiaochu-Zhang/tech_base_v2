@@ -360,6 +360,21 @@
     }
   }
 
+  function mergeInfoItems(baseItems, localItems){
+    const map = new Map();
+    (baseItems || []).forEach(item => {
+      if(item && item.id) map.set(item.id, item);
+    });
+    (localItems || []).forEach(item => {
+      if(item && item.id) map.set(item.id, item);
+    });
+    return Array.from(map.values());
+  }
+
+  function getPublishedItems(items){
+    return (items || []).filter(item => item && item.status === "published");
+  }
+
   function inDateRange(date, from, to){
     if(!date) return !(from || to); // 没日期时，只有在没筛选范围时才通过
     const d = date.slice(0,10);
@@ -439,16 +454,7 @@
     ]);
 
     const localPublished = loadLocalPublished();
-    if(localPublished.length){
-      const map = new Map();
-      infos.forEach(item => {
-        if(item && item.id) map.set(item.id, item);
-      });
-      localPublished.forEach(item => {
-        if(item && item.id) map.set(item.id, item);
-      });
-      infos = Array.from(map.values());
-    }
+    infos = getPublishedItems(mergeInfoItems(infos, localPublished));
 
     const domainMap = Object.fromEntries(domains.map(d=>[d.id,d]));
 
@@ -637,7 +643,6 @@
       const importanceMax = $("#importanceMax").value ? Number($("#importanceMax").value) : null;
 
       const filtered = infos.filter(info => {
-        if(info.status && info.status !== "published") return false;
         if(!inDateRange(info.published_at, from, to)) return false;
         if(domainId){
           const allowed = getDescendants(domainId); // 父域 + 所有子孙
