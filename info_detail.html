@@ -443,6 +443,8 @@ Open: info_detail.html?id=INFO_CCUS_0001
       "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
     }[c]));
     const manualKey = "manualAlerts";
+    const draftKey = "drafts";
+    const publishedKey = "published_items";
 
     function getDomainIds(item){
       if(Array.isArray(item.domain_ids) && item.domain_ids.length){
@@ -486,6 +488,15 @@ Open: info_detail.html?id=INFO_CCUS_0001
       }
     }
 
+    function readLocalList(key){
+      try{
+        const raw = JSON.parse(localStorage.getItem(key) || "[]");
+        return Array.isArray(raw) ? raw : [];
+      }catch{
+        return [];
+      }
+    }
+
     // Domain path: walk parent chain
     function buildDomainMap(domains){
       const map = new Map();
@@ -514,6 +525,9 @@ Open: info_detail.html?id=INFO_CCUS_0001
       $("#infoId").textContent = id;
 
       try{
+        const localDrafts = readLocalList(draftKey);
+        const localPublished = readLocalList(publishedKey);
+
         const [
           domains,
           infoItems,
@@ -528,9 +542,11 @@ Open: info_detail.html?id=INFO_CCUS_0001
           loadJson("./data/indicator_values.json")
         ]);
 
-        const info = infoItems.find(x => x.id === id);
+        let info = localDrafts.find(x => x.id === id);
+        if(!info) info = localPublished.find(x => x.id === id);
+        if(!info) info = infoItems.find(x => x.id === id);
         if(!info){
-          throw new Error(`找不到情报：${id}（请检查 info_items.json 是否包含该 id）`);
+          throw new Error(`找不到情报：${id}（请检查本地草稿/发布或 info_items.json 是否包含该 id）`);
         }
 
         const domainMap = buildDomainMap(domains);

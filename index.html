@@ -754,6 +754,15 @@
         renderSummaryTable();
       }
 
+      function filterExpandItems(items, domainId, filterType, alertOnly, toDate, alerts){
+        const subtree = collectSubtreeIds(domainId, domains);
+        let list = items.filter(i => isItemInSubtree(i, subtree));
+        if(filterType === "tech") list = list.filter(isTech);
+        if(filterType === "policy") list = list.filter(isPolicy);
+        if(alertOnly) list = list.filter(i => !!getActiveAlertByInfoId(i.id, alerts, toDate));
+        return list;
+      }
+
       function renderSummaryTable(){
         const to = $("#toDate").value;
         const tbody = $("#tbody");
@@ -780,19 +789,21 @@
                <div class="muted small">${domainPath(domainId, domainMap)}</div>`;
           tr.appendChild(nameTd);
 
-          const makeNum = (n, kind, did) => {
+          const makeNum = (n, did, filterType, alertOnly, labelText) => {
             const span = document.createElement("span");
             span.className = "clicknum";
-            span.setAttribute("data-kind", kind);
-            span.setAttribute("data-did", did || "");
+            span.setAttribute("data-domain-id", did || "");
+            span.setAttribute("data-filter-type", filterType || "");
+            span.setAttribute("data-alert-only", alertOnly ? "true" : "false");
+            span.setAttribute("data-label", labelText);
             span.textContent = String(n);
             return span;
           };
 
-          const tdTotal = document.createElement("td"); tdTotal.appendChild(makeNum(counts.total, "info", domainId||"")); tr.appendChild(tdTotal);
-          const tdTech = document.createElement("td"); tdTech.appendChild(makeNum(counts.tech, "info", domainId||"")); tr.appendChild(tdTech);
-          const tdAlert = document.createElement("td"); tdAlert.appendChild(makeNum(counts.alert, "alert", domainId||"")); tr.appendChild(tdAlert);
-          const tdPolicy = document.createElement("td"); tdPolicy.appendChild(makeNum(counts.policy, "info", domainId||"")); tr.appendChild(tdPolicy);
+          const tdTotal = document.createElement("td"); tdTotal.appendChild(makeNum(counts.total, domainId||"", "", false, "情报总数")); tr.appendChild(tdTotal);
+          const tdTech = document.createElement("td"); tdTech.appendChild(makeNum(counts.tech, domainId||"", "tech", false, "技术情报")); tr.appendChild(tdTech);
+          const tdAlert = document.createElement("td"); tdAlert.appendChild(makeNum(counts.alert, domainId||"", "", true, "技术预警（active）")); tr.appendChild(tdAlert);
+          const tdPolicy = document.createElement("td"); tdPolicy.appendChild(makeNum(counts.policy, domainId||"", "policy", false, "政策情报")); tr.appendChild(tdPolicy);
 
           tbody.appendChild(tr);
         }
@@ -834,17 +845,16 @@
         // expand top10
         tbody.querySelectorAll(".clicknum").forEach(el=>{
           el.addEventListener("click", ()=>{
-            const kind = el.getAttribute("data-kind"); // info | alert
-            const did = el.getAttribute("data-did") || null;
+            const did = el.getAttribute("data-domain-id") || null;
+            const filterType = el.getAttribute("data-filter-type") || "";
+            const alertOnly = el.getAttribute("data-alert-only") === "true";
+            const labelText = el.getAttribute("data-label") || "情报";
             const targetDomainId = did ? did : (currentId ? currentId : (rootId ? rootId : null));
 
-            const targetSubtree = collectSubtreeIds(targetDomainId, domains);
-            const scopeItems2 = items.filter(i => isItemInSubtree(i, targetSubtree));
-            const sorted = sortByImportanceThenTime(scopeItems2);
-
-            const t = (kind==="alert")
-              ? `预警 Top10（${domainPath(targetDomainId, domainMap)}）`
-              : `情报 Top10（${domainPath(targetDomainId, domainMap)}）`;
+            const filtered = filterExpandItems(items, targetDomainId, filterType, alertOnly, to, alerts);
+            const sorted = sortByImportanceThenTime(filtered);
+            const kind = alertOnly ? "alert" : "info";
+            const t = `${labelText}（${domainPath(targetDomainId, domainMap)}）`;
 
             showExpand(kind, targetDomainId, t, sorted, domainMap, alerts, to);
           });
