@@ -272,6 +272,14 @@
             <option value="quarter">一季度</option>
           </select>
         </div>
+        <div>
+          <label>预警颜色</label>
+          <select id="alert_color">
+            <option value="yellow">黄色</option>
+            <option value="orange" selected>橙色</option>
+            <option value="red">红色</option>
+          </select>
+        </div>
       </div>
       <label>预警内容 alert_body（必填）</label>
       <input id="alert_body" placeholder="填写预警内容" />
@@ -302,6 +310,7 @@
   const $ = s => document.querySelector(s);
   const draftKey = "drafts";
   const publishedKey = "published_items";
+  const manualStorageKey = "manualAlerts";
 
   const escapeHtml = str => str.replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
 
@@ -692,6 +701,24 @@
       list.unshift(payload);
     }
     localStorage.setItem(publishedKey, JSON.stringify(list));
+    const manualAlerts = JSON.parse(localStorage.getItem(manualStorageKey) || "{}");
+    if(isAlertEnabled()){
+      manualAlerts[infoId] = {
+        info_item_id: infoId,
+        status: "active",
+        source: "manual",
+        manual_override: true,
+        alert_title: $("#alert_title").value.trim(),
+        alert_body: $("#alert_body").value.trim(),
+        reviewer_comment: $("#reviewer_comment").value.trim(),
+        alert_color: $("#alert_color").value,
+        created_at: now
+      };
+      localStorage.setItem(manualStorageKey, JSON.stringify(manualAlerts));
+    }else if(manualAlerts[infoId]){
+      delete manualAlerts[infoId];
+      localStorage.setItem(manualStorageKey, JSON.stringify(manualAlerts));
+    }
     const drafts = JSON.parse(localStorage.getItem(draftKey) || "[]");
     const filtered = drafts.filter(item => item.id !== state.currentDraftId);
     localStorage.setItem(draftKey, JSON.stringify(filtered));
