@@ -976,6 +976,46 @@
           return;
         }
 
+        function getAxisLabels(){
+          const xLabel = xMode === "time" ? "发布时间" : "重要度（1-5）";
+          let yLabel = "情报数";
+          if(yMode === "avg_importance") yLabel = "平均重要度";
+          if(yMode === "indicator") yLabel = "指标值（示例）";
+          return { xLabel, yLabel };
+        }
+
+        function niceStep(range, targetTicks){
+          if(!Number.isFinite(range) || range <= 0) return 1;
+          const rough = range / targetTicks;
+          const pow = Math.pow(10, Math.floor(Math.log10(rough)));
+          const mult = rough / pow;
+          if(mult <= 1) return 1 * pow;
+          if(mult <= 2) return 2 * pow;
+          if(mult <= 5) return 5 * pow;
+          return 10 * pow;
+        }
+
+        function buildYTicks(minY, maxY, targetTicks){
+          if(minY === maxY){
+            return [minY];
+          }
+          const step = niceStep(maxY - minY, targetTicks);
+          const start = Math.floor(minY / step) * step;
+          const end = Math.ceil(maxY / step) * step;
+          const ticks = [];
+          for(let v = start; v <= end + step * 0.5; v += step){
+            ticks.push(Number(v.toFixed(6)));
+          }
+          return ticks;
+        }
+
+        function formatTick(v){
+          if(Math.abs(v) >= 100) return String(Math.round(v));
+          if(Math.abs(v) >= 10) return String(Number(v.toFixed(1)));
+          if(Math.abs(v) >= 1) return String(Number(v.toFixed(2)));
+          return String(Number(v.toFixed(3)));
+        }
+
         const maxY = Math.max(...points.map(p => p.y)) || 1;
         const minY = Math.min(...points.map(p => p.y));
         const xStep = (canvas.width - padding * 2) / Math.max(points.length - 1, 1);
@@ -983,6 +1023,55 @@
           const range = maxY - minY || 1;
           return canvas.height - padding - ((y - minY) / range) * (canvas.height - padding * 2);
         };
+
+        // y axis ticks + grid
+        ctx.font = "12px sans-serif";
+        ctx.fillStyle = "rgba(255,255,255,.7)";
+        ctx.strokeStyle = "rgba(255,255,255,.12)";
+        ctx.lineWidth = 1;
+        const yTicks = buildYTicks(minY, maxY, 5);
+        yTicks.forEach(t => {
+          const y = mapY(t);
+          ctx.beginPath();
+          ctx.moveTo(padding, y);
+          ctx.lineTo(canvas.width - padding, y);
+          ctx.stroke();
+          ctx.fillText(formatTick(t), 6, y + 4);
+        });
+
+        // x axis ticks
+        ctx.fillStyle = "rgba(255,255,255,.7)";
+        if(xMode === "time"){
+          const step = Math.max(1, Math.ceil(points.length / 6));
+          points.forEach((p, idx) => {
+            if(idx % step !== 0 && idx !== points.length - 1) return;
+            const x = padding + idx * xStep;
+            ctx.beginPath();
+            ctx.moveTo(x, canvas.height - padding);
+            ctx.lineTo(x, canvas.height - padding + 6);
+            ctx.stroke();
+            ctx.fillText(String(p.x).slice(5), x - 14, canvas.height - padding + 18);
+          });
+        }else{
+          points.forEach((p, idx) => {
+            const x = padding + idx * xStep;
+            ctx.beginPath();
+            ctx.moveTo(x, canvas.height - padding);
+            ctx.lineTo(x, canvas.height - padding + 6);
+            ctx.stroke();
+            ctx.fillText(String(p.x), x - 3, canvas.height - padding + 18);
+          });
+        }
+
+        // axis labels
+        const { xLabel, yLabel } = getAxisLabels();
+        ctx.fillStyle = "rgba(255,255,255,.8)";
+        ctx.fillText(xLabel, canvas.width / 2 - 24, canvas.height - 8);
+        ctx.save();
+        ctx.translate(14, canvas.height / 2 + 20);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText(yLabel, 0, 0);
+        ctx.restore();
 
         ctx.strokeStyle = "#9ad2ff";
         ctx.lineWidth = 2;
