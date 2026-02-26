@@ -142,7 +142,7 @@
 
 ---
 
-## [ ] Block 4 - 总表合并与筛选稳定化
+## [x] Block 4 - 总表合并与筛选稳定化
 
 ### 目标
 实现 data/*.json + localStorage 合并读取

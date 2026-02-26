@@ -634,6 +634,7 @@
     });
 
     function render(){
+      const infosLive = getPublishedItems(mergeInfoItems(infos, loadLocalPublished()));
       const from = $("#fromDate").value;
       const to = $("#toDate").value;
       const domainId = $("#domainFilter").value;
@@ -648,7 +649,7 @@
       const importanceMin = $("#importanceMin").value ? Number($("#importanceMin").value) : null;
       const importanceMax = $("#importanceMax").value ? Number($("#importanceMax").value) : null;
 
-      const filtered = infos.filter(info => {
+      const filtered = infosLive.filter(info => {
         if(!inDateRange(info.published_at, from, to)) return false;
         if(domainId){
           const allowed = getDescendants(domainId); // 父域 + 所有子孙
