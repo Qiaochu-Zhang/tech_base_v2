@@ -182,6 +182,10 @@
       font-weight:800;
       color:#bfe6ff;
     }
+    .tree-node.current{
+      font-weight:800;
+      color:#ffd27a;
+    }
     .tree-indent{
       width: 16px;
       flex: 0 0 16px;
@@ -367,6 +371,7 @@
 <script type="module">
   const $ = s => document.querySelector(s);
   const publishedKey = "published_items";
+  const rootKey = "root_domain_id";
 
   // ---------------- URL helpers ----------------
   function sp(){ return new URLSearchParams(location.search); }
@@ -539,7 +544,7 @@
   }
 
   // ---------------- Tree dropdown (root selector) ----------------
-  function renderRootTree(domains, domainMap, rootId, setRootId){
+  function renderRootTree(domains, domainMap, rootId, currentId, setRootId){
     const box = $("#rootTree");
     box.innerHTML = "";
 
@@ -575,7 +580,9 @@
       row.appendChild(toggle);
 
       const label = document.createElement("div");
-      label.className = "tree-node" + (node.id === rootId ? " active" : "");
+      label.className = "tree-node" +
+        (node.id === rootId ? " active" : "") +
+        (node.id === currentId ? " current" : "");
       label.textContent = `L${node.level} · ${node.name}`;
       label.title = domainPath(node.id, domainMap);
       label.addEventListener("click", ()=>{
@@ -599,7 +606,7 @@
     rootToggle.className = "tree-toggle empty";
     rootToggle.textContent = "·";
     const rootLabel = document.createElement("div");
-    rootLabel.className = "tree-node" + (!rootId ? " active" : "");
+    rootLabel.className = "tree-node" + (!rootId ? " active" : "") + (!currentId && !rootId ? " current" : "");
     rootLabel.textContent = "ROOT · 最上层（全部一级领域）";
     rootLabel.title = "统计所有一级领域";
     rootLabel.addEventListener("click", ()=> setRootId(null));
@@ -682,8 +689,10 @@
 
       const domainMap = buildDomainMap(domains);
 
+      const storedRoot = localStorage.getItem(rootKey) || "";
       // state: rootId (null means ROOT)
-      let rootId = qp("root_id") || null;
+      let rootId = qp("root_id") || storedRoot || null;
+      if(rootId && !domainMap.get(rootId)) rootId = null;
       // state: current browsing domainId for drill-down
       let currentId = qp("domain_id") || null;
 
@@ -712,14 +721,19 @@
         $("#rangeText").textContent = `${$("#fromDate").value || "全部"} ~ ${$("#toDate").value || "全部"}`;
       }
 
-      // render root tree
-      renderRootTree(domains, domainMap, rootId, (newRootId)=>{
-        rootId = newRootId;
-        currentId = null;
-        setQuery({ root_id: rootId || "", domain_id: "" });
-        syncLeft();
-        renderTableAndResetExpand();
-      });
+      function renderRootAndTree(){
+        renderRootTree(domains, domainMap, rootId, currentId, (newRootId)=>{
+          rootId = newRootId;
+          localStorage.setItem(rootKey, rootId || "");
+          currentId = null;
+          setQuery({ root_id: rootId || "", domain_id: "" });
+          syncLeft();
+          renderTableAndResetExpand();
+          renderRootAndTree();
+        });
+      }
+
+      renderRootAndTree();
 
       function visibleChildrenIds(parentId){
         const CHILDREN = buildChildrenIndex(domains);
@@ -752,6 +766,7 @@
       function renderTableAndResetExpand(){
         $("#expandPanel").style.display = "none";
         renderSummaryTable();
+        renderTrendChart();
       }
 
       function filterExpandItems(items, domainId, filterType, alertOnly, toDate, alerts){
@@ -839,6 +854,7 @@
             setQuery({ domain_id: currentId });
             syncLeft();
             renderTableAndResetExpand();
+            renderRootAndTree();
           });
         });
 
@@ -932,7 +948,8 @@
         const yMode = $("#trendY").value;
         const from = $("#fromDate").value;
         const to = $("#toDate").value;
-        const rootSubtree = collectSubtreeIds(rootId, domains);
+        const targetId = currentId ? currentId : rootId;
+        const rootSubtree = collectSubtreeIds(targetId, domains);
 
         const items = infoItemsRaw.filter(i =>
           i.status === "published" &&
