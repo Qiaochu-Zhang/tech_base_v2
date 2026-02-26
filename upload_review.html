@@ -513,9 +513,11 @@
   }
 
   function updateAlertDisplay(){
-    const shouldAlert = state.aiShouldAlert || state.manualAlert;
-    $("#aiAlertText").textContent = shouldAlert ? "AI 建议预警：是" : "AI 建议预警：否";
+    const shouldAlert = state.aiShouldAlert;
+    const enabled = isAlertEnabled();
+    $("#aiAlertText").textContent = `${shouldAlert ? "AI 预警建议：是" : "AI 预警建议：否"}（当前：${enabled ? "已开启" : "未开启"}）`;
     $("#aiAlertReason").textContent = state.aiReasons.join("、") || "-";
+    $("#btnToggleAlert").textContent = enabled ? "关闭预警" : "强制开启预警";
   }
 
   function runAiSuggestion(form){
@@ -556,12 +558,12 @@
   }
 }
 
-  function alertRequired(){
-    return state.aiShouldAlert || state.manualAlert;
+  function isAlertEnabled(){
+    return state.manualAlert;
   }
 
   function validateAlert(){
-    if(!alertRequired()) return "";
+    if(!isAlertEnabled()) return "";
     if(!$("#alert_title").value.trim()) return "预警标题必填";
     if(!$("#alert_body").value.trim()) return "预警内容必填";
     if(!$("#reviewer_comment").value.trim()) return "reviewer_comment 必填";
@@ -605,7 +607,7 @@
   function showPreview(){
     const form = getForm();
     const indicators = state.indicators.filter(i => i.keep);
-    const alertOn = alertRequired();
+    const alertOn = isAlertEnabled();
     const preview = `
       <div style="font-weight:700; font-size:18px;">${escapeHtml(form.title || "-")}</div>
       <div class="muted small" style="margin-top:6px;">发布时间：${form.published_at} / 重要度：${form.importance_score}</div>

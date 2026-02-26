@@ -754,6 +754,15 @@
         renderSummaryTable();
       }
 
+      function filterExpandItems(items, domainId, filterType, alertOnly, toDate, alerts){
+        const subtree = collectSubtreeIds(domainId, domains);
+        let list = items.filter(i => isItemInSubtree(i, subtree));
+        if(filterType === "tech") list = list.filter(isTech);
+        if(filterType === "policy") list = list.filter(isPolicy);
+        if(alertOnly) list = list.filter(i => !!getActiveAlertByInfoId(i.id, alerts, toDate));
+        return list;
+      }
+
       function renderSummaryTable(){
         const to = $("#toDate").value;
         const tbody = $("#tbody");
@@ -780,19 +789,21 @@
                <div class="muted small">${domainPath(domainId, domainMap)}</div>`;
           tr.appendChild(nameTd);
 
-          const makeNum = (n, kind, did) => {
+          const makeNum = (n, did, filterType, alertOnly, labelText) => {
             const span = document.createElement("span");
             span.className = "clicknum";
-            span.setAttribute("data-kind", kind);
-            span.setAttribute("data-did", did || "");
+            span.setAttribute("data-domain-id", did || "");
+            span.setAttribute("data-filter-type", filterType || "");
+            span.setAttribute("data-alert-only", alertOnly ? "true" : "false");
+            span.setAttribute("data-label", labelText);
             span.textContent = String(n);
             return span;
           };
 
-          const tdTotal = document.createElement("td"); tdTotal.appendChild(makeNum(counts.total, "info", domainId||"")); tr.appendChild(tdTotal);
-          const tdTech = document.createElement("td"); tdTech.appendChild(makeNum(counts.tech, "info", domainId||"")); tr.appendChild(tdTech);
-          const tdAlert = document.createElement("td"); tdAlert.appendChild(makeNum(counts.alert, "alert", domainId||"")); tr.appendChild(tdAlert);
-          const tdPolicy = document.createElement("td"); tdPolicy.appendChild(makeNum(counts.policy, "info", domainId||"")); tr.appendChild(tdPolicy);
+          const tdTotal = document.createElement("td"); tdTotal.appendChild(makeNum(counts.total, domainId||"", "", false, "情报总数")); tr.appendChild(tdTotal);
+          const tdTech = document.createElement("td"); tdTech.appendChild(makeNum(counts.tech, domainId||"", "tech", false, "技术情报")); tr.appendChild(tdTech);
+          const tdAlert = document.createElement("td"); tdAlert.appendChild(makeNum(counts.alert, domainId||"", "", true, "技术预警（active）")); tr.appendChild(tdAlert);
+          const tdPolicy = document.createElement("td"); tdPolicy.appendChild(makeNum(counts.policy, domainId||"", "policy", false, "政策情报")); tr.appendChild(tdPolicy);
 
           tbody.appendChild(tr);
         }
@@ -834,17 +845,16 @@
         // expand top10
         tbody.querySelectorAll(".clicknum").forEach(el=>{
           el.addEventListener("click", ()=>{
-            const kind = el.getAttribute("data-kind"); // info | alert
-            const did = el.getAttribute("data-did") || null;
+            const did = el.getAttribute("data-domain-id") || null;
+            const filterType = el.getAttribute("data-filter-type") || "";
+            const alertOnly = el.getAttribute("data-alert-only") === "true";
+            const labelText = el.getAttribute("data-label") || "情报";
             const targetDomainId = did ? did : (currentId ? currentId : (rootId ? rootId : null));
 
-            const targetSubtree = collectSubtreeIds(targetDomainId, domains);
-            const scopeItems2 = items.filter(i => isItemInSubtree(i, targetSubtree));
-            const sorted = sortByImportanceThenTime(scopeItems2);
-
-            const t = (kind==="alert")
-              ? `预警 Top10（${domainPath(targetDomainId, domainMap)}）`
-              : `情报 Top10（${domainPath(targetDomainId, domainMap)}）`;
+            const filtered = filterExpandItems(items, targetDomainId, filterType, alertOnly, to, alerts);
+            const sorted = sortByImportanceThenTime(filtered);
+            const kind = alertOnly ? "alert" : "info";
+            const t = `${labelText}（${domainPath(targetDomainId, domainMap)}）`;
 
             showExpand(kind, targetDomainId, t, sorted, domainMap, alerts, to);
           });
@@ -910,6 +920,14 @@
       function renderTrendChart(){
         const canvas = $("#trendCanvas");
         const ctx = canvas.getContext("2d");
+        const dpr = window.devicePixelRatio || 1;
+        const cssWidth = canvas.clientWidth || canvas.width;
+        const cssHeight = canvas.clientHeight || canvas.height;
+        if(canvas.width !== Math.round(cssWidth * dpr) || canvas.height !== Math.round(cssHeight * dpr)){
+          canvas.width = Math.round(cssWidth * dpr);
+          canvas.height = Math.round(cssHeight * dpr);
+        }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         const xMode = $("#trendX").value;
         const yMode = $("#trendY").value;
         const from = $("#fromDate").value;
@@ -961,28 +979,117 @@
         }
 
         const padding = 40;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, cssWidth, cssHeight);
         ctx.strokeStyle = "rgba(255,255,255,.2)";
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(padding, padding);
-        ctx.lineTo(padding, canvas.height - padding);
-        ctx.lineTo(canvas.width - padding, canvas.height - padding);
+        ctx.lineTo(padding, cssHeight - padding);
+        ctx.lineTo(cssWidth - padding, cssHeight - padding);
         ctx.stroke();
 
         if(points.length === 0){
           ctx.fillStyle = "rgba(255,255,255,.6)";
-          ctx.fillText("无数据", canvas.width / 2 - 20, canvas.height / 2);
+          ctx.fillText("无数据", cssWidth / 2 - 20, cssHeight / 2);
           return;
+        }
+
+        function getAxisLabels(){
+          const xLabel = xMode === "time" ? "发布时间" : "重要度（1-5）";
+          let yLabel = "情报数";
+          if(yMode === "avg_importance") yLabel = "平均重要度";
+          if(yMode === "indicator") yLabel = "指标值（示例）";
+          return { xLabel, yLabel };
+        }
+
+        function niceStep(range, targetTicks){
+          if(!Number.isFinite(range) || range <= 0) return 1;
+          const rough = range / targetTicks;
+          const pow = Math.pow(10, Math.floor(Math.log10(rough)));
+          const mult = rough / pow;
+          if(mult <= 1) return 1 * pow;
+          if(mult <= 2) return 2 * pow;
+          if(mult <= 5) return 5 * pow;
+          return 10 * pow;
+        }
+
+        function buildYTicks(minY, maxY, targetTicks){
+          if(minY === maxY){
+            return [minY];
+          }
+          const step = niceStep(maxY - minY, targetTicks);
+          const start = Math.floor(minY / step) * step;
+          const end = Math.ceil(maxY / step) * step;
+          const ticks = [];
+          for(let v = start; v <= end + step * 0.5; v += step){
+            ticks.push(Number(v.toFixed(6)));
+          }
+          return ticks;
+        }
+
+        function formatTick(v){
+          if(Math.abs(v) >= 100) return String(Math.round(v));
+          if(Math.abs(v) >= 10) return String(Number(v.toFixed(1)));
+          if(Math.abs(v) >= 1) return String(Number(v.toFixed(2)));
+          return String(Number(v.toFixed(3)));
         }
 
         const maxY = Math.max(...points.map(p => p.y)) || 1;
         const minY = Math.min(...points.map(p => p.y));
-        const xStep = (canvas.width - padding * 2) / Math.max(points.length - 1, 1);
+        const xStep = (cssWidth - padding * 2) / Math.max(points.length - 1, 1);
         const mapY = y => {
           const range = maxY - minY || 1;
-          return canvas.height - padding - ((y - minY) / range) * (canvas.height - padding * 2);
+          return cssHeight - padding - ((y - minY) / range) * (cssHeight - padding * 2);
         };
+
+        // y axis ticks + grid
+        ctx.font = "12px sans-serif";
+        ctx.fillStyle = "rgba(255,255,255,.7)";
+        ctx.strokeStyle = "rgba(255,255,255,.12)";
+        ctx.lineWidth = 1;
+        const yTicks = buildYTicks(minY, maxY, 5);
+        yTicks.forEach(t => {
+          const y = mapY(t);
+          ctx.beginPath();
+          ctx.moveTo(padding, y);
+          ctx.lineTo(cssWidth - padding, y);
+          ctx.stroke();
+          ctx.fillText(formatTick(t), 6, y + 4);
+        });
+
+        // x axis ticks
+        ctx.fillStyle = "rgba(255,255,255,.7)";
+        if(xMode === "time"){
+          const step = Math.max(1, Math.ceil(points.length / 6));
+          points.forEach((p, idx) => {
+            if(idx % step !== 0 && idx !== points.length - 1) return;
+            const x = padding + idx * xStep;
+            ctx.beginPath();
+            ctx.moveTo(x, cssHeight - padding);
+            ctx.lineTo(x, cssHeight - padding + 6);
+            ctx.stroke();
+            ctx.fillText(String(p.x).slice(5), x - 14, cssHeight - padding + 18);
+          });
+        }else{
+          points.forEach((p, idx) => {
+            const x = padding + idx * xStep;
+            ctx.beginPath();
+            ctx.moveTo(x, cssHeight - padding);
+            ctx.lineTo(x, cssHeight - padding + 6);
+            ctx.stroke();
+            ctx.fillText(String(p.x), x - 3, cssHeight - padding + 18);
+          });
+        }
+
+        // axis labels
+        const { xLabel, yLabel } = getAxisLabels();
+        ctx.fillStyle = "rgba(255,255,255,.8)";
+        ctx.fillText(xLabel, cssWidth / 2 - 24, cssHeight - 8);
+        ctx.save();
+        ctx.translate(14, cssHeight / 2 + 20);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText(yLabel, 0, 0);
+        ctx.restore();
 
         ctx.strokeStyle = "#9ad2ff";
         ctx.lineWidth = 2;
