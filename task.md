@@ -188,17 +188,20 @@
 ## [ ] Block 5 - FastAPI 后端骨架
 
 ### 目标
-创建最小可运行后端
+创建最小可运行后端框架，为后续数据库接入做准备。
 
 ### 要求
-- FastAPI 项目结构
-- /api/health
-- 基础 info-items CRUD
-- docker-compose 支持
+- 建立标准 FastAPI 项目结构（如 app/main.py、routers、schemas 等）
+- 实现 GET /api/health 接口，返回 { "status": "ok" }
+- 实现 GET /api/domains/tree 接口（暂时从现有 data/domains.json 读取）
+- 实现 GET /api/info-items 接口（暂时从 data/*.json 或 mock 数据返回，不做复杂筛选）
+- 提供 docker-compose 支持（仅包含 api 服务，不接数据库）
+- 提供最基本的 pytest 用例（至少包含 health 接口测试）
 
 ### 验收标准
-- docker compose up 成功
-- /api/health 返回 200
+- docker compose up -d --build 成功
+- 访问 http://localhost:8000/api/health 返回 200
+- /api/domains/tree 返回 JSON 数据
 - pytest 通过
 
 ---
@@ -241,4 +244,5 @@ user可以再中间任何时刻增加block
 - 小步提交（1-3 commit）
 
 - 所有测试通过后才声明完成
+
 
