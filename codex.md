@@ -9,9 +9,9 @@ Rules differ by stage. You must detect the current stage before acting.
 
 ---
 
-# 1. Scope Control
+# 1. Scope Controlhttps://github.com/pulls
 
-- Only work on the current Block specified in TASKS.md.
+- User can add new block and excute first.
 - Execute Blocks strictly in order.
 - Do NOT modify other Blocks.
 - Do NOT refactor unrelated code.
@@ -141,4 +141,5 @@ Do not declare completion without verification.
 
 - Human review is mandatory before merge.
 - Do not auto-merge.
+
 - Wait for explicit human confirmation before moving to next Block.
