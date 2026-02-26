@@ -969,18 +969,18 @@
         }
 
         const padding = 40;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, cssWidth, cssHeight);
         ctx.strokeStyle = "rgba(255,255,255,.2)";
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(padding, padding);
-        ctx.lineTo(padding, canvas.height - padding);
-        ctx.lineTo(canvas.width - padding, canvas.height - padding);
+        ctx.lineTo(padding, cssHeight - padding);
+        ctx.lineTo(cssWidth - padding, cssHeight - padding);
         ctx.stroke();
 
         if(points.length === 0){
           ctx.fillStyle = "rgba(255,255,255,.6)";
-          ctx.fillText("无数据", canvas.width / 2 - 20, canvas.height / 2);
+          ctx.fillText("无数据", cssWidth / 2 - 20, cssHeight / 2);
           return;
         }
 
@@ -1026,10 +1026,10 @@
 
         const maxY = Math.max(...points.map(p => p.y)) || 1;
         const minY = Math.min(...points.map(p => p.y));
-        const xStep = (canvas.width - padding * 2) / Math.max(points.length - 1, 1);
+        const xStep = (cssWidth - padding * 2) / Math.max(points.length - 1, 1);
         const mapY = y => {
           const range = maxY - minY || 1;
-          return canvas.height - padding - ((y - minY) / range) * (canvas.height - padding * 2);
+          return cssHeight - padding - ((y - minY) / range) * (cssHeight - padding * 2);
         };
 
         // y axis ticks + grid
@@ -1042,7 +1042,7 @@
           const y = mapY(t);
           ctx.beginPath();
           ctx.moveTo(padding, y);
-          ctx.lineTo(canvas.width - padding, y);
+          ctx.lineTo(cssWidth - padding, y);
           ctx.stroke();
           ctx.fillText(formatTick(t), 6, y + 4);
         });
@@ -1055,28 +1055,28 @@
             if(idx % step !== 0 && idx !== points.length - 1) return;
             const x = padding + idx * xStep;
             ctx.beginPath();
-            ctx.moveTo(x, canvas.height - padding);
-            ctx.lineTo(x, canvas.height - padding + 6);
+            ctx.moveTo(x, cssHeight - padding);
+            ctx.lineTo(x, cssHeight - padding + 6);
             ctx.stroke();
-            ctx.fillText(String(p.x).slice(5), x - 14, canvas.height - padding + 18);
+            ctx.fillText(String(p.x).slice(5), x - 14, cssHeight - padding + 18);
           });
         }else{
           points.forEach((p, idx) => {
             const x = padding + idx * xStep;
             ctx.beginPath();
-            ctx.moveTo(x, canvas.height - padding);
-            ctx.lineTo(x, canvas.height - padding + 6);
+            ctx.moveTo(x, cssHeight - padding);
+            ctx.lineTo(x, cssHeight - padding + 6);
             ctx.stroke();
-            ctx.fillText(String(p.x), x - 3, canvas.height - padding + 18);
+            ctx.fillText(String(p.x), x - 3, cssHeight - padding + 18);
           });
         }
 
         // axis labels
         const { xLabel, yLabel } = getAxisLabels();
         ctx.fillStyle = "rgba(255,255,255,.8)";
-        ctx.fillText(xLabel, canvas.width / 2 - 24, canvas.height - 8);
+        ctx.fillText(xLabel, cssWidth / 2 - 24, cssHeight - 8);
         ctx.save();
-        ctx.translate(14, canvas.height / 2 + 20);
+        ctx.translate(14, cssHeight / 2 + 20);
         ctx.rotate(-Math.PI / 2);
         ctx.fillText(yLabel, 0, 0);
         ctx.restore();
