@@ -210,7 +210,6 @@
     .item:hover{ background:rgba(255,255,255,.04); }
     .item-title{ font-weight:750; }
     .item-meta{ margin-top:6px; display:flex; gap:10px; flex-wrap:wrap; color:var(--muted); font-size:12px; }
-
   </style>
 </head>
 <body>
@@ -240,16 +239,24 @@
           </div>
         </div>
         <div class="bd">
-          <label>时间范围（自动刷新）</label>
+
+          <!-- 时间范围标题 + 显示/隐藏日期筛选 -->
+          <div class="row" style="align-items:center;">
+            <label style="margin:10px 0 6px; flex:1;">时间范围（自动刷新）</label>
+            <button class="btn" id="btnToggleDates" type="button" style="width:auto; padding:6px 10px;">显示日期筛选</button>
+          </div>
+
           <div class="row">
             <button class="btn" data-range="7">近 7 天</button>
             <button class="btn" data-range="30">近 30 天</button>
           </div>
           <div class="row" style="margin-top:8px;">
             <button class="btn" data-range="365">近 365 天</button>
-            <button class="btn" data-range="custom">自定义</button>
+            <button class="btn" data-range="all">全部时间</button>
           </div>
-          <div class="row" style="margin-top:8px;">
+
+          <!-- 日期输入：默认隐藏，但功能保留 -->
+          <div class="row" id="dateRow" style="margin-top:8px;">
             <div>
               <label>From</label>
               <input id="fromDate" type="date" />
@@ -373,18 +380,15 @@
     history.replaceState(null, "", `${location.pathname}?${p.toString()}`);
   }
 
-
-    function isInSubtree(childId, ancestorId, domainMap){
+  function isInSubtree(childId, ancestorId, domainMap){
     if(!ancestorId) return true; // ROOT没有边界
     let cur = domainMap.get(childId);
     while(cur){
-    if(cur.id === ancestorId) return true;
-    cur = cur.parent_id ? domainMap.get(cur.parent_id) : null;
+      if(cur.id === ancestorId) return true;
+      cur = cur.parent_id ? domainMap.get(cur.parent_id) : null;
     }
     return false;
-    }
-
-
+  }
 
   // ---------------- date helpers ----------------
   function todayISO(){
@@ -428,7 +432,6 @@
   function isExpiredAlert(alert, toDate){
     if(alert.status !== "active") return true;
     if(!alert.expires_at) return false; // permanent
-    // expires_at < today(or toDate) => expired
     const t = toDate || todayISO();
     return fmtDate(alert.expires_at) < fmtDate(t);
   }
@@ -492,7 +495,6 @@
     if(domainId){
       stack.push(domainId);
     }else{
-      // ROOT: all top-level
       (byParent.get(null) || []).forEach(id=>stack.push(id));
     }
 
@@ -542,8 +544,7 @@
     box.innerHTML = "";
 
     const CHILDREN = buildChildrenIndex(domains);
-    const expanded = new Set(); // local expanded state for root tree
-    // default expand roots
+    const expanded = new Set();
     (CHILDREN.get(null) || []).forEach(d => expanded.add(d.id));
 
     function renderNode(node, depth){
@@ -591,7 +592,7 @@
       }
     }
 
-    // include a special ROOT option on top
+    // ROOT option
     const rootRow = document.createElement("div");
     rootRow.className = "tree-row";
     const rootToggle = document.createElement("div");
@@ -665,6 +666,7 @@
         loadJson("./data/alerts.json"),
         loadJson("./data/indicator_values.json")
       ]);
+
       let infoItemsRaw = infoItemsRawSource;
       const localPublished = loadLocalPublished();
       if(localPublished.length){
@@ -680,34 +682,39 @@
 
       const domainMap = buildDomainMap(domains);
 
-      // state: rootId is the "tree dropdown" selection (null means ROOT/top-level)
+      // state: rootId (null means ROOT)
       let rootId = qp("root_id") || null;
-
-      // state: current browsing domainId for drill-down (null means show children of rootId)
-      // if root is ROOT(null), current=null means show top-level domains
+      // state: current browsing domainId for drill-down
       let currentId = qp("domain_id") || null;
 
-      // init dates
+      // init dates (default is ALL TIME if no URL params)
       $("#fromDate").value = qp("from") || "";
       $("#toDate").value = qp("to") || "";
+
+      // ✅ 默认隐藏日期输入框（功能不变）
+      $("#dateRow").style.display = "none";
+      $("#btnToggleDates").addEventListener("click", () => {
+        const row = $("#dateRow");
+        const open = row.style.display !== "none";
+        row.style.display = open ? "none" : "flex";
+        $("#btnToggleDates").textContent = open ? "显示日期筛选" : "隐藏日期筛选";
+      });
 
       function syncLeft(){
         $("#rootPathText").textContent = domainPath(rootId, domainMap);
         $("#rootIdText").textContent = rootId ? rootId : "ROOT";
 
-        // drill-down path
         const p = currentId ? domainPath(currentId, domainMap) : (rootId ? domainPath(rootId, domainMap) : "最上层（全部一级领域）");
         $("#pathText").textContent = p;
         const lvl = currentId ? (domainMap.get(currentId)?.level ?? "-") : (rootId ? (domainMap.get(rootId)?.level ?? "-") : "ROOT");
         $("#levelText").textContent = `LEVEL=${lvl}`;
 
-        $("#rangeText").textContent = `${$("#fromDate").value} ~ ${$("#toDate").value}`;
+        $("#rangeText").textContent = `${$("#fromDate").value || "全部"} ~ ${$("#toDate").value || "全部"}`;
       }
 
       // render root tree
       renderRootTree(domains, domainMap, rootId, (newRootId)=>{
         rootId = newRootId;
-        // reset drill-down when root changes
         currentId = null;
         setQuery({ root_id: rootId || "", domain_id: "" });
         syncLeft();
@@ -715,16 +722,13 @@
       });
 
       function visibleChildrenIds(parentId){
-        // within root subtree: parentId children (or top-level if parentId null)
         const CHILDREN = buildChildrenIndex(domains);
         if(parentId){
           return (CHILDREN.get(parentId) || []).map(d=>d.id);
         }
-        // parentId null => show children of rootId (or top-level if rootId null)
         if(rootId){
           return (CHILDREN.get(rootId) || []).map(d=>d.id);
         }
-        // rootId null => top-level
         return (CHILDREN.get(null) || []).map(d=>d.id);
       }
 
@@ -738,7 +742,6 @@
 
         const rootSubtree = collectSubtreeIds(rootId, domains);
 
-        // only published & in date range & in root subtree
         return infoItemsRaw.filter(i =>
           i.status === "published" &&
           isItemInSubtree(i, rootSubtree) &&
@@ -752,20 +755,16 @@
       }
 
       function renderSummaryTable(){
-        const from = $("#fromDate").value;
         const to = $("#toDate").value;
-
         const tbody = $("#tbody");
         tbody.innerHTML = "";
 
         const items = filterInfoItemsInRootRange();
-        const alerts = alertsRaw; // raw, we will filter active + not expired in helpers
+        const alerts = alertsRaw;
 
         const childIds = visibleChildrenIds(currentId);
 
-        // total row = aggregated of current scope (root subtree or current subtree)
         const scopeSubtree = collectSubtreeIds(currentId ? currentId : (rootId ? rootId : null), domains);
-
         const scopeItems = items.filter(i => isItemInSubtree(i, scopeSubtree));
         const scopeTech = scopeItems.filter(isTech);
         const scopePolicy = scopeItems.filter(isPolicy);
@@ -805,7 +804,6 @@
           policy: scopePolicy.length
         }, true);
 
-        // rows for each child domain
         for(const did of childIds){
           const subtree = collectSubtreeIds(did, domains);
           const its = items.filter(i => isItemInSubtree(i, subtree));
@@ -821,7 +819,7 @@
           });
         }
 
-        // bind drill down
+        // drill down
         tbody.querySelectorAll("[data-down]").forEach(a=>{
           a.addEventListener("click", (e)=>{
             e.preventDefault();
@@ -833,7 +831,7 @@
           });
         });
 
-        // bind expand top10
+        // expand top10
         tbody.querySelectorAll(".clicknum").forEach(el=>{
           el.addEventListener("click", ()=>{
             const kind = el.getAttribute("data-kind"); // info | alert
@@ -853,12 +851,25 @@
         });
       }
 
+      // time range buttons (7/30/365 + all)
       const rangeButtons = document.querySelectorAll("[data-range]");
       rangeButtons.forEach(btn => {
         btn.addEventListener("click", () => {
           const val = btn.getAttribute("data-range");
-          if(val === "custom") return;
+
+          if(val === "all"){
+            $("#fromDate").value = "";
+            $("#toDate").value = "";
+            setQuery({ from: "", to: "" });
+            syncLeft();
+            renderTableAndResetExpand();
+            renderTrendChart();
+            return;
+          }
+
           const days = Number(val);
+          if(!Number.isFinite(days)) return;
+
           $("#fromDate").value = daysAgoISO(days);
           $("#toDate").value = todayISO();
           setQuery({ from: $("#fromDate").value, to: $("#toDate").value });
@@ -868,6 +879,7 @@
         });
       });
 
+      // date inputs debounce (logic unchanged)
       let debounceTimer = null;
       ["fromDate", "toDate"].forEach(id => {
         $(`#${id}`).addEventListener("input", () => {
@@ -903,6 +915,7 @@
         const from = $("#fromDate").value;
         const to = $("#toDate").value;
         const rootSubtree = collectSubtreeIds(rootId, domains);
+
         const items = infoItemsRaw.filter(i =>
           i.status === "published" &&
           isItemInSubtree(i, rootSubtree) &&
@@ -1013,3 +1026,4 @@
 </script>
 </body>
 </html>
+

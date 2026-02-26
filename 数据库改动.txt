@@ -1,0 +1,579 @@
+人为增加预警功能（发布和情报总表），情报总表增加领域快速跳转（输入可选）框，上传时可选择多个领域
+首页左边时间筛选放在上面近一周月年 from to  下面按钮都去掉 上传情报时候正文放标签上面 情报总表加上领域筛选（左侧可以隐藏） 筛选新技术和已有技术 增加筛选选项 来源 情报类型 重要度 搜索框放在下面一行 关键词高亮后前后正文展开功能 技术仪表盘合并到分级汇总表里面 就保留画图趋势功能可以自己选择xy轴 自动折叠看画图界面 总表加筛选器是否有comment 情报上传前增加comment选项 先填写所有的东西 点击提交之后相同页面出现ai推荐指标 自动说明是否有预警 如果不对 人工可以改数值 如果有预警的话强制写内容 然后才能预览和发布 情报上传本地草稿管理页面 参考情报总表界面 另外情报上传要有excel批量上传按钮 并且提供模板
+
+以及之前给你的讨论方案 给出完整详尽的设计和技术方案
+
+
+我希望从无到有做上面这个项目，数据之类的可以编一些：下面这份是把你这次新增/改动点 全部收敛成一套“V1.5（样机→可上线）”完整设计+技术方案。我会按「产品信息架构 → 业务流程 → 数据模型 → API → 前端实现 → AI流程 → 批量导入 → 风险&验收」把细节写到可直接开干的程度。\n\n0. 方案命名建议\n\n《前沿技术情报与预警平台（V1.5）功能说明与系统实现方案》\n副标题：分级汇总表一体化仪表盘 + 情报预警闭环 + 草稿/批量导入 + AI 指标推荐\n\n1. 总体目标与边界（V1.5）\n1.1 目标\n\n首页变为一体化工作台：分级汇总表 +（可折叠）趋势图（原技术仪表盘功能并入）\n\n情报全流程升级为**“先填全字段 → 提交 → AI 推荐指标/预警判定 → 人工修正 → 预览 → 发布”**\n\n支持人为新增/编辑预警（发布页与情报总表）\n\n情报总表：更强筛选（领域/来源/类型/重要度/新旧技术/comment/预警）+ 关键词高亮与正文片段展开\n\n上传：支持多领域归属、草稿管理、Excel 批量上传（含模板）\n\n1.2 边界（仍可验收）\n\n统计/趋势/预警口径只基于 published 情报（草稿不入统计）\n\n文献库仍作为只读来源（可转情报草稿，不改变主闭环）\n\nAI：仅做“推荐指标 + 预警建议 + 可解释说明”，最终入库由人工确认\n\n2. 信息架构（页面级）\n\n你现在的页面会调整为 6 个（其中“技术仪表盘”并入首页，不再单独导航）：\n\nindex.html 首页工作台\n\n左：时间筛选（周/月/年 + from/to）+ 领域树/快速跳转\n\n中：分级汇总表（下钻/展开 top10）\n\n右（可折叠面板）：趋势图（自选 X/Y 轴）\n\n支持“一键进入情报总表（带筛选）”\n\ninfo_table.html 情报总表（主工作界面）\n\n左侧筛选器（可隐藏）\n\n顶部：领域快速跳转（输入可选）\n\n搜索框在下一行（你要求）\n\n列表：关键字高亮 + 正文片段（前后展开）+ comment/预警状态标识\n\n支持：人为新增/编辑预警入口\n\nupload_review.html 上传&复核（主闭环）\n\n第一步：填写全部字段（正文在 tags 上面；支持多领域选择）+ comment（上传前）\n\n点击提交：同页出现 AI 推荐指标/预警建议\n\n人工调整指标值/预警状态\n\n若预警 active：强制填写预警内容/结论\n\n预览 → 发布\n\ndrafts.html 本地草稿管理（参考总表 UI）\n\n列表/筛选/编辑/删除/继续提交 AI\n\n草稿存在 LocalStorage（样机）或 DB（上线）\n\nexcel_import.html Excel 批量上传\n\n下载模板按钮\n\n上传 Excel → 预览解析结果 → 校验错误提示 → 批量生成草稿 → 进入 drafts 管理或逐条提交 AI\n\ninfo_detail.html 情报详情（已有）\n\n增加：comment 展示、预警编辑入口（权限控制）\n\n3. 关键交互与业务流程（按你最新口径）\n3.1 首页左侧时间筛选（去掉按钮）\n\nUI：\n\n快捷：近 7 天 / 近 30 天 / 近 365 天 / 自定义\n\n自定义：from/to 仍可编辑\n\n行为：任何变动都自动刷新（不再需要“应用筛选按钮”）\n\n实现细节：\n\n点击快捷选项会同时写入 from/to\n\nfrom/to 手改会自动触发 render（加 300ms debounce 防抖）\n\n3.2 人为增加预警（发布页 & 情报总表）\n\n你要的是：即便不是新技术/超范围，也能人工开预警。\n\n规则建议：\n\n预警入口（按钮）放在：\n\n上传&复核：AI 结果出来后，允许“强制开启预警”\n\n情报总表：每条情报行上有「预警」按钮（无预警→创建；有预警→编辑/解除/延期）\n\n“是否预警”从自动判定 + 人工覆盖组合：\n\nalert_source = auto|manual\n\nmanual_override = true/false\n\n若人工关闭预警，需要填写 manual_dismiss_reason\n\n3.3 上传时可选择多个领域\n\n你现在从单 domain_id 变成 多选 domain_ids：\n\n业务含义：\n\n一条情报可同时属于多个 4 级领域（或允许跨层级但仍建议落到最深层）\n\n统计口径：在各领域树下都计数（注意“总计”会双计，所以下面给你一个避免坑的方案）\n\n统计避免坑（强烈建议）\n\n首页“分级汇总表”的口径要明确：\n\n领域统计 = 去重后的情报数（以情报 id 去重）\n\n或者 领域统计 = 关联数（允许重复计数）\n\n老板一般更喜欢“去重后的情报数”，否则总数对不上。\n\n我建议：\n\n领域行显示：unique_info_count（去重）\n\n鼠标 hover 显示：relations_count（关联次数）\n\n3.4 上传页字段顺序与 AI 阶段\n\n你要的闭环是 “先填完 → 提交 → AI → 人工改 → 预览发布”，并增加“上传前 comment”。\n\n新流程（强制）\n\n填写所有字段（含 comment、领域多选、tags、多选来源/类型、重要度、新旧技术）\n\n点击【提交并生成 AI 建议】\n\n页面下半区出现：\n\nAI 推荐指标（候选列表 + 建议值/单位/来源片段）\n\nAI 预警判定：是否预警、原因（新技术/超范围/人工）\n\n人工修正：\n\n勾选/删除指标、修改数值与单位\n\n选择是否预警\n\n若预警=是：强制填写（预警标题、内容、reviewer_comment、duration）\n\n预览（只读）\n\n发布（写入 published，参与统计）\n\n3.5 情报总表增强（筛选、搜索、高亮、展开）\n\n你提出的点我逐条落地成 UI/行为：\n\n左侧筛选（可隐藏）\n\n领域筛选（树形 + 快速跳转输入可选）\n\n新技术/已有技术（is_new_tech）\n\n来源（source_types 多选）\n\n情报类型（info_types 多选）\n\n重要度（importance_score 范围或多选）\n\n是否预警（has_active_alert）\n\n是否有 comment（has_comment）\n\n时间范围（同首页）\n\n搜索框放下面一行\n\n上一行放“领域快速跳转”\n\n下一行单独放 keyword 搜索（标题+正文+comment）\n\n关键词高亮 + 正文前后展开\n\n展示规则（列表每条情报）：\n\n标题中命中词高亮\n\n正文显示命中附近片段：…前 60 字 + <mark>命中</mark> + 后 60 字…\n\n点击「展开上下文」→ 展开为 400~800 字（仍是片段，不是全文）\n\n点击「全文」→ 进详情页\n\n实现：前端对 content 做一次 indexOf 定位，切片并 wrap <mark>；多命中显示第一个为主（或允许多段）。\n\n3.6 技术仪表盘并入首页（只保留画图趋势、可折叠）\n\n首页右侧/下方加一个可折叠面板：\n\n“趋势图面板”能力\n\n可选 X 轴：时间（published_at）/ 重要度 / 其他可扩展字段\n\n可选 Y 轴：某个指标 value_number（或 count）\n\n支持：\n\n折线（时间 vs 指标值）\n\n柱状（领域 vs 情报数）\n\n散点（时间 vs 指标值，点颜色=预警颜色）\n\n自动折叠：默认收起，用户点击“显示趋势图”展开；展开后页面滚动定位到图表区域\n\nV1.5 样机建议用：\n\n原生 Canvas（你已有）或 ECharts（更快更漂亮）\n\n统一数据源：从 info_items + indicator_values 前端聚合（样机）；上线后改为后端聚合 API\n\n4. 数据模型（PostgreSQL）变更清单\n\n下面按“最小改动 + 可扩展”给你。\n\n4.1 情报：支持多领域\n\n原：info_items.domain_id\n改：多对多\n\ninfo_items 去掉单 domain_id（或保留一个 primary_domain_id 方便默认归属）\n\n新增关联表：\n\ninfo_item_domains\n\ninfo_item_id\n\ndomain_id\n\nis_primary (bool, default false) // 主领域（用于默认展示路径）\n\ncreated_at\n\n建议：必须至少一个 domain_id；且至少一个 is_primary=true\n\n4.2 comment（上传前/总表筛选）\n\ninfo_items\n\nreviewer_comment 你已有预警 comment；现在要的是情报 comment（上传前）\n新增字段：\n\ncomment (text, nullable) // 情报员/上传者的研判、备注\n\nhas_comment (bool derived/cache，可选)\n\n4.3 预警：支持人工创建/覆盖\n\nalerts 增加：\n\nsource enum: auto|manual\n\nmanual_override bool\n\ndismiss_reason text nullable（手动解除原因）\n\n并把“预警是否 active”定义为：\n\nstatus="active" 且（expires_at is null 或 expires_at >= today）\n\n4.4 情报筛选字段索引（上线性能）\n\ninfo_items(status, published_at)\n\ninfo_items(is_new_tech)\n\ninfo_items(importance_score)\n\ninfo_items(content)：上线建议用 PostgreSQL tsvector 做全文检索\n\ninfo_items(source_types jsonb) GIN\n\ninfo_items(info_types jsonb) GIN\n\ninfo_item_domains(domain_id, info_item_id) 复合索引\n\n5. API 设计（V1.5）\n5.1 首页工作台\n\nGET /api/domains/tree\n\nGET /api/summary?root_domain_id=&current_domain_id=&from=&to=\n\n返回：当前层级子域列表统计（去重口径）\n\nGET /api/top-items?kind=info|alert&domain_id=&from=&to=&limit=10&sort=importance|time\n\n5.2 情报总表\n\nGET /api/info-items\n\nfilters:\n\ndomain_id（含子域）\n\nfrom/to\n\nis_new_tech\n\nsource_types[]\n\ninfo_types[]\n\nimportance_min/max\n\nhas_active_alert\n\nhas_comment\n\nq（全文检索）\n\nsort & pagination\n\n5.3 上传&复核（AI 两阶段）\n\nPOST /api/info-items/draft（保存草稿，字段齐全）\n\nPOST /api/info-items/{id}/ai-suggest\n\n输入：title/content/source_url/source_types/info_types/domains/is_new_tech/importance/comment\n\n输出：\n\nindicators_suggestions[]\n\nalert_suggestion: { should_alert, reasons[], color_suggested }\n\nPUT /api/info-items/{id}（人工修订指标/字段）\n\nPOST /api/info-items/{id}/publish\n\n服务端校验：\n\n必填字段齐全\n\n若 should_alert 或 manual alert：预警必填字段齐全\n\n5.4 预警（人为新增/编辑）\n\nPOST /api/alerts（manual 创建）\n\nPUT /api/alerts/{id}（编辑、延期）\n\nPOST /api/alerts/{id}/dismiss（解除+原因）\n\n5.5 草稿管理\n\nGET /api/info-items?status=draft&created_by=me\n\nDELETE /api/info-items/{id}（草稿删除）\n\n（样机阶段 drafts 可纯前端 localStorage，不必上 API）\n\n5.6 Excel 批量上传\n\nGET /api/templates/import.xlsx（下载模板）\n\nPOST /api/import/excel（解析预览，不直接发布）\n\n输出：rows[] + errors[]\n\nPOST /api/import/excel/commit（批量生成 draft）\n\n6. 前端实现方案（你先做样机也能无痛升级）\n\n你现在是静态样机路线，我建议分两层：\n\n6.1 样机阶段（纯前端 JSON）\n\n所有新增功能仍然在前端实现，但把数据结构按“未来 DB/API”设计好（避免重写）\n\n新增 ./data/info_item_domains.json（如果你不想改 info_items.json 结构）\n\n或直接在 info_items.json 里加 domain_ids: [] + primary_domain_id\n\n6.2 上线阶段（前后端分离）\n\n前端只做展示与交互\n\n汇总统计、全文检索、趋势聚合全部放后端\n\nAI 推理由后端调用模型（并缓存）\n\n7. AI 推荐指标 & 预警判定（可解释、可控）\n7.1 AI 输出结构（建议）\n{\n  "indicators": [\n    {\n      "name": "捕集成本",\n      "unit": "USD/tCO2",\n      "suggested_value": 65,\n      "confidence": 0.62,\n      "evidence": "…原文片段…",\n      "note": "来自摘要/新闻段落"\n    }\n  ],\n  "alert": {\n    "should_alert": true,\n    "reasons": ["新技术", "成本显著低于历史范围下限"],\n    "suggested_color": "orange",\n    "explain": "…解释…"\n  }\n}\n\n7.2 人工修订机制\n\n每条指标 suggestion 可：接受/拒绝/改值/改单位\n\n预警 suggestion 可：接受/关闭/改颜色\n\n若预警最终为 true：强制填写预警正文 + reviewer_comment + duration\n\n7.3 缓存（避免重复调用）\n\nai_indicator_suggestions 存模型输出\n\n若草稿内容没变（hash_key 相同），直接复用上次 AI 结果\n\n8. Excel 批量上传（模板 & 校验）\n8.1 模板字段（建议）\n\n必填：\n\ntitle\n\npublished_at\n\nsource_url\n\nsource_types（用分号分隔）\n\ninfo_types（分号）\n\ndomains（用 > 表示路径，或直接填 domain_id；多领域用 ;）\n\nimportance_score\n\nis_new_tech（true/false）\n\ncontent\n可选：\n\ntags（分号）\n\nclassification\n\ncomment\n\nalert_manual（true/false）\n\nalert_title / alert_body / reviewer_comment / duration（如果 alert_manual=true 则必填）\n\n8.2 导入流程\n\n上传 Excel → 解析 → 展示预览表格（高亮错误行）\n\n通过校验 → 批量生成草稿（draft）\n\n进入 drafts.html：逐条点“生成 AI 建议”或批量生成（限流）\n\n9. 权限与审计（你后面要给老板看的“可控”）\n\nRBAC 不变（A/B/C），但新增两个关键控制点：\n\n谁可以“人工开预警/解除预警”（B 可、A 不可、C 全局）\n\n发布必须留下 reviewed_by（即使同一人复核，也要记录）\n\n审计日志至少记录：\n\npublish\n\nalert create/update/dismiss\n\nindicator range update（如果你后续启用范围）\n\n10. 风险点与对策（工程实现层）\n\n多领域导致统计重复\n\n对策：统计按 info_id 去重；同时可展示关联数作为补充\n\n筛选项很多，前端聚合会卡（样机数据一多就明显）\n\n对策：上线后把筛选/聚合移到后端；样机用分页+惰性渲染\n\n高亮与展开会带来 XSS 风险（如果 content 有 HTML）\n\n对策：统一对 content 做 escape，再插入 <mark>（安全处理）\n\nAI 建议与人工修改冲突\n\n对策：AI 结果永远是“候选”，只有人工确认写入 indicator_values\n\n11. V1.5 验收清单（按你这次新增点）\n\n首页：\n\n左侧时间筛选在最上（周/月/年/from/to），无按钮，自动刷新\n\n分级汇总表下钻正常、点击数字展开 top10 正常\n\n右侧趋势图可折叠，能选 X/Y 并绘制\n\n情报总表：\n\n左侧筛选器可隐藏\n\n增加领域快速跳转（输入可选）\n\n筛选：新/旧技术、来源、情报类型、重要度、是否有 comment、是否预警\n\n搜索框在下一行，关键词高亮 + 正文前后展开\n\n支持人为新增/编辑/解除预警\n\n上传&复核：\n\n正文在 tags 上面\n\n上传时可选多个领域\n\n上传前 comment 字段存在 + 总表可筛 has_comment\n\n点击提交后同页出现 AI 指标推荐 + 预警建议\n\n可人工改指标值；预警为 true 时强制补齐预警内容才能发布\n\n草稿：\n\n本地草稿管理页（参考总表）\n\nExcel：\n\n有批量上传入口 + 下载模板 + 预览校验 + 批量生成草稿\n\n如果你愿意，我下一步可以把这套方案“落到你现在的静态样机代码结构”上：\n\n先给你 info_table.html 的完整升级版（因为它牵涉最多：筛选器/高亮/展开/预警按钮）\n\n再给你 upload_review.html 的两阶段 AI UI（提交后出现 AI 面板、强制预警字段校验）\n\n最后给你 drafts.html + excel_import.html（模板字段我也能给你生成一份 demo xlsx 结构说明）\n\n你想先从哪个页面开始改？我建议顺序：上传&复核 → 总表 → 首页合并趋势图。 我准备做这样一个数据平台的项目 告诉我要怎么一步步做
+
+
+下面这份是把你这次新增/改动点 全部收敛成一套“V1.5（样机→可上线）”完整设计+技术方案。我会按「产品信息架构 → 业务流程 → 数据模型 → API → 前端实现 → AI流程 → 批量导入 → 风险&验收」把细节写到可直接开干的程度。
+
+0. 方案命名建议
+
+《前沿技术情报与预警平台（V1.5）功能说明与系统实现方案》
+副标题：分级汇总表一体化仪表盘 + 情报预警闭环 + 草稿/批量导入 + AI 指标推荐
+
+1. 总体目标与边界（V1.5）
+1.1 目标
+
+首页变为一体化工作台：分级汇总表 +（可折叠）趋势图（原技术仪表盘功能并入）
+
+情报全流程升级为**“先填全字段 → 提交 → AI 推荐指标/预警判定 → 人工修正 → 预览 → 发布”**
+
+支持人为新增/编辑预警（发布页与情报总表）
+
+情报总表：更强筛选（领域/来源/类型/重要度/新旧技术/comment/预警）+ 关键词高亮与正文片段展开
+
+上传：支持多领域归属、草稿管理、Excel 批量上传（含模板）
+
+1.2 边界（仍可验收）
+
+统计/趋势/预警口径只基于 published 情报（草稿不入统计）
+
+文献库仍作为只读来源（可转情报草稿，不改变主闭环）
+
+AI：仅做“推荐指标 + 预警建议 + 可解释说明”，最终入库由人工确认
+
+2. 信息架构（页面级）
+
+你现在的页面会调整为 6 个（其中“技术仪表盘”并入首页，不再单独导航）：
+
+index.html 首页工作台
+
+左：时间筛选（周/月/年 + from/to）+ 领域树/快速跳转
+
+中：分级汇总表（下钻/展开 top10）
+
+右（可折叠面板）：趋势图（自选 X/Y 轴）
+
+支持“一键进入情报总表（带筛选）”
+
+info_table.html 情报总表（主工作界面）
+
+左侧筛选器（可隐藏）
+
+顶部：领域快速跳转（输入可选）
+
+搜索框在下一行（你要求）
+
+列表：关键字高亮 + 正文片段（前后展开）+ comment/预警状态标识
+
+支持：人为新增/编辑预警入口
+
+upload_review.html 上传&复核（主闭环）
+
+第一步：填写全部字段（正文在 tags 上面；支持多领域选择）+ comment（上传前）
+
+点击提交：同页出现 AI 推荐指标/预警建议
+
+人工调整指标值/预警状态
+
+若预警 active：强制填写预警内容/结论
+
+预览 → 发布
+
+drafts.html 本地草稿管理（参考总表 UI）
+
+列表/筛选/编辑/删除/继续提交 AI
+
+草稿存在 LocalStorage（样机）或 DB（上线）
+
+excel_import.html Excel 批量上传
+
+下载模板按钮
+
+上传 Excel → 预览解析结果 → 校验错误提示 → 批量生成草稿 → 进入 drafts 管理或逐条提交 AI
+
+info_detail.html 情报详情（已有）
+
+增加：comment 展示、预警编辑入口（权限控制）
+
+3. 关键交互与业务流程（按你最新口径）
+3.1 首页左侧时间筛选（去掉按钮）
+
+UI：
+
+快捷：近 7 天 / 近 30 天 / 近 365 天 / 自定义
+
+自定义：from/to 仍可编辑
+
+行为：任何变动都自动刷新（不再需要“应用筛选按钮”）
+
+实现细节：
+
+点击快捷选项会同时写入 from/to
+
+from/to 手改会自动触发 render（加 300ms debounce 防抖）
+
+3.2 人为增加预警（发布页 & 情报总表）
+
+你要的是：即便不是新技术/超范围，也能人工开预警。
+
+规则建议：
+
+预警入口（按钮）放在：
+
+上传&复核：AI 结果出来后，允许“强制开启预警”
+
+情报总表：每条情报行上有「预警」按钮（无预警→创建；有预警→编辑/解除/延期）
+
+“是否预警”从自动判定 + 人工覆盖组合：
+
+alert_source = auto|manual
+
+manual_override = true/false
+
+若人工关闭预警，需要填写 manual_dismiss_reason
+
+3.3 上传时可选择多个领域
+
+你现在从单 domain_id 变成 多选 domain_ids：
+
+业务含义：
+
+一条情报可同时属于多个 4 级领域（或允许跨层级但仍建议落到最深层）
+
+统计口径：在各领域树下都计数（注意“总计”会双计，所以下面给你一个避免坑的方案）
+
+统计避免坑（强烈建议）
+
+首页“分级汇总表”的口径要明确：
+
+领域统计 = 去重后的情报数（以情报 id 去重）
+
+或者 领域统计 = 关联数（允许重复计数）
+
+老板一般更喜欢“去重后的情报数”，否则总数对不上。
+
+我建议：
+
+领域行显示：unique_info_count（去重）
+
+鼠标 hover 显示：relations_count（关联次数）
+
+3.4 上传页字段顺序与 AI 阶段
+
+你要的闭环是 “先填完 → 提交 → AI → 人工改 → 预览发布”，并增加“上传前 comment”。
+
+新流程（强制）
+
+填写所有字段（含 comment、领域多选、tags、多选来源/类型、重要度、新旧技术）
+
+点击【提交并生成 AI 建议】
+
+页面下半区出现：
+
+AI 推荐指标（候选列表 + 建议值/单位/来源片段）
+
+AI 预警判定：是否预警、原因（新技术/超范围/人工）
+
+人工修正：
+
+勾选/删除指标、修改数值与单位
+
+选择是否预警
+
+若预警=是：强制填写（预警标题、内容、reviewer_comment、duration）
+
+预览（只读）
+
+发布（写入 published，参与统计）
+
+3.5 情报总表增强（筛选、搜索、高亮、展开）
+
+你提出的点我逐条落地成 UI/行为：
+
+左侧筛选（可隐藏）
+
+领域筛选（树形 + 快速跳转输入可选）
+
+新技术/已有技术（is_new_tech）
+
+来源（source_types 多选）
+
+情报类型（info_types 多选）
+
+重要度（importance_score 范围或多选）
+
+是否预警（has_active_alert）
+
+是否有 comment（has_comment）
+
+时间范围（同首页）
+
+搜索框放下面一行
+
+上一行放“领域快速跳转”
+
+下一行单独放 keyword 搜索（标题+正文+comment）
+
+关键词高亮 + 正文前后展开
+
+展示规则（列表每条情报）：
+
+标题中命中词高亮
+
+正文显示命中附近片段：…前 60 字 + <mark>命中</mark> + 后 60 字…
+
+点击「展开上下文」→ 展开为 400~800 字（仍是片段，不是全文）
+
+点击「全文」→ 进详情页
+
+实现：前端对 content 做一次 indexOf 定位，切片并 wrap <mark>；多命中显示第一个为主（或允许多段）。
+
+3.6 技术仪表盘并入首页（只保留画图趋势、可折叠）
+
+首页右侧/下方加一个可折叠面板：
+
+“趋势图面板”能力
+
+可选 X 轴：时间（published_at）/ 重要度 / 其他可扩展字段
+
+可选 Y 轴：某个指标 value_number（或 count）
+
+支持：
+
+折线（时间 vs 指标值）
+
+柱状（领域 vs 情报数）
+
+散点（时间 vs 指标值，点颜色=预警颜色）
+
+自动折叠：默认收起，用户点击“显示趋势图”展开；展开后页面滚动定位到图表区域
+
+V1.5 样机建议用：
+
+原生 Canvas（你已有）或 ECharts（更快更漂亮）
+
+统一数据源：从 info_items + indicator_values 前端聚合（样机）；上线后改为后端聚合 API
+
+4. 数据模型（PostgreSQL）变更清单
+
+下面按“最小改动 + 可扩展”给你。
+
+4.1 情报：支持多领域
+
+原：info_items.domain_id
+改：多对多
+
+info_items 去掉单 domain_id（或保留一个 primary_domain_id 方便默认归属）
+
+新增关联表：
+
+info_item_domains
+
+info_item_id
+
+domain_id
+
+is_primary (bool, default false) // 主领域（用于默认展示路径）
+
+created_at
+
+建议：必须至少一个 domain_id；且至少一个 is_primary=true
+
+4.2 comment（上传前/总表筛选）
+
+info_items
+
+reviewer_comment 你已有预警 comment；现在要的是情报 comment（上传前）
+新增字段：
+
+comment (text, nullable) // 情报员/上传者的研判、备注
+
+has_comment (bool derived/cache，可选)
+
+4.3 预警：支持人工创建/覆盖
+
+alerts 增加：
+
+source enum: auto|manual
+
+manual_override bool
+
+dismiss_reason text nullable（手动解除原因）
+
+并把“预警是否 active”定义为：
+
+status="active" 且（expires_at is null 或 expires_at >= today）
+
+4.4 情报筛选字段索引（上线性能）
+
+info_items(status, published_at)
+
+info_items(is_new_tech)
+
+info_items(importance_score)
+
+info_items(content)：上线建议用 PostgreSQL tsvector 做全文检索
+
+info_items(source_types jsonb) GIN
+
+info_items(info_types jsonb) GIN
+
+info_item_domains(domain_id, info_item_id) 复合索引
+
+5. API 设计（V1.5）
+5.1 首页工作台
+
+GET /api/domains/tree
+
+GET /api/summary?root_domain_id=&current_domain_id=&from=&to=
+
+返回：当前层级子域列表统计（去重口径）
+
+GET /api/top-items?kind=info|alert&domain_id=&from=&to=&limit=10&sort=importance|time
+
+5.2 情报总表
+
+GET /api/info-items
+
+filters:
+
+domain_id（含子域）
+
+from/to
+
+is_new_tech
+
+source_types[]
+
+info_types[]
+
+importance_min/max
+
+has_active_alert
+
+has_comment
+
+q（全文检索）
+
+sort & pagination
+
+5.3 上传&复核（AI 两阶段）
+
+POST /api/info-items/draft（保存草稿，字段齐全）
+
+POST /api/info-items/{id}/ai-suggest
+
+输入：title/content/source_url/source_types/info_types/domains/is_new_tech/importance/comment
+
+输出：
+
+indicators_suggestions[]
+
+alert_suggestion: { should_alert, reasons[], color_suggested }
+
+PUT /api/info-items/{id}（人工修订指标/字段）
+
+POST /api/info-items/{id}/publish
+
+服务端校验：
+
+必填字段齐全
+
+若 should_alert 或 manual alert：预警必填字段齐全
+
+5.4 预警（人为新增/编辑）
+
+POST /api/alerts（manual 创建）
+
+PUT /api/alerts/{id}（编辑、延期）
+
+POST /api/alerts/{id}/dismiss（解除+原因）
+
+5.5 草稿管理
+
+GET /api/info-items?status=draft&created_by=me
+
+DELETE /api/info-items/{id}（草稿删除）
+
+（样机阶段 drafts 可纯前端 localStorage，不必上 API）
+
+5.6 Excel 批量上传
+
+GET /api/templates/import.xlsx（下载模板）
+
+POST /api/import/excel（解析预览，不直接发布）
+
+输出：rows[] + errors[]
+
+POST /api/import/excel/commit（批量生成 draft）
+
+6. 前端实现方案（你先做样机也能无痛升级）
+
+你现在是静态样机路线，我建议分两层：
+
+6.1 样机阶段（纯前端 JSON）
+
+所有新增功能仍然在前端实现，但把数据结构按“未来 DB/API”设计好（避免重写）
+
+新增 ./data/info_item_domains.json（如果你不想改 info_items.json 结构）
+
+或直接在 info_items.json 里加 domain_ids: [] + primary_domain_id
+
+6.2 上线阶段（前后端分离）
+
+前端只做展示与交互
+
+汇总统计、全文检索、趋势聚合全部放后端
+
+AI 推理由后端调用模型（并缓存）
+
+7. AI 推荐指标 & 预警判定（可解释、可控）
+7.1 AI 输出结构（建议）
+{
+  "indicators": [
+    {
+      "name": "捕集成本",
+      "unit": "USD/tCO2",
+      "suggested_value": 65,
+      "confidence": 0.62,
+      "evidence": "…原文片段…",
+      "note": "来自摘要/新闻段落"
+    }
+  ],
+  "alert": {
+    "should_alert": true,
+    "reasons": ["新技术", "成本显著低于历史范围下限"],
+    "suggested_color": "orange",
+    "explain": "…解释…"
+  }
+}
+
+7.2 人工修订机制
+
+每条指标 suggestion 可：接受/拒绝/改值/改单位
+
+预警 suggestion 可：接受/关闭/改颜色
+
+若预警最终为 true：强制填写预警正文 + reviewer_comment + duration
+
+7.3 缓存（避免重复调用）
+
+ai_indicator_suggestions 存模型输出
+
+若草稿内容没变（hash_key 相同），直接复用上次 AI 结果
+
+8. Excel 批量上传（模板 & 校验）
+8.1 模板字段（建议）
+
+必填：
+
+title
+
+published_at
+
+source_url
+
+source_types（用分号分隔）
+
+info_types（分号）
+
+domains（用 > 表示路径，或直接填 domain_id；多领域用 ;）
+
+importance_score
+
+is_new_tech（true/false）
+
+content
+可选：
+
+tags（分号）
+
+classification
+
+comment
+
+alert_manual（true/false）
+
+alert_title / alert_body / reviewer_comment / duration（如果 alert_manual=true 则必填）
+
+8.2 导入流程
+
+上传 Excel → 解析 → 展示预览表格（高亮错误行）
+
+通过校验 → 批量生成草稿（draft）
+
+进入 drafts.html：逐条点“生成 AI 建议”或批量生成（限流）
+
+9. 权限与审计（你后面要给老板看的“可控”）
+
+RBAC 不变（A/B/C），但新增两个关键控制点：
+
+谁可以“人工开预警/解除预警”（B 可、A 不可、C 全局）
+
+发布必须留下 reviewed_by（即使同一人复核，也要记录）
+
+审计日志至少记录：
+
+publish
+
+alert create/update/dismiss
+
+indicator range update（如果你后续启用范围）
+
+10. 风险点与对策（工程实现层）
+
+多领域导致统计重复
+
+对策：统计按 info_id 去重；同时可展示关联数作为补充
+
+筛选项很多，前端聚合会卡（样机数据一多就明显）
+
+对策：上线后把筛选/聚合移到后端；样机用分页+惰性渲染
+
+高亮与展开会带来 XSS 风险（如果 content 有 HTML）
+
+对策：统一对 content 做 escape，再插入 <mark>（安全处理）
+
+AI 建议与人工修改冲突
+
+对策：AI 结果永远是“候选”，只有人工确认写入 indicator_values
+
+11. V1.5 验收清单（按你这次新增点）
+
+首页：
+
+左侧时间筛选在最上（周/月/年/from/to），无按钮，自动刷新
+
+分级汇总表下钻正常、点击数字展开 top10 正常
+
+右侧趋势图可折叠，能选 X/Y 并绘制
+
+情报总表：
+
+左侧筛选器可隐藏
+
+增加领域快速跳转（输入可选）
+
+筛选：新/旧技术、来源、情报类型、重要度、是否有 comment、是否预警
+
+搜索框在下一行，关键词高亮 + 正文前后展开
+
+支持人为新增/编辑/解除预警
+
+上传&复核：
+
+正文在 tags 上面
+
+上传时可选多个领域
+
+上传前 comment 字段存在 + 总表可筛 has_comment
+
+点击提交后同页出现 AI 指标推荐 + 预警建议
+
+可人工改指标值；预警为 true 时强制补齐预警内容才能发布
+
+草稿：
+
+本地草稿管理页（参考总表）
+
+Excel：
+
+有批量上传入口 + 下载模板 + 预览校验 + 批量生成草稿
+
+我希望从无到有做上面这个项目，数据之类的可以编一些：下面这份是把你这次新增/改动点 全部收敛成一套“V1.5（样机→可上线）”完整设计+技术方案。我会按「产品信息架构 → 业务流程 → 数据模型 → API → 前端实现 → AI流程 → 批量导入 → 风险&验收」把细节写到可直接开干的程度。\n\n0. 方案命名建议\n\n《前沿技术情报与预警平台（V1.5）功能说明与系统实现方案》\n副标题：分级汇总表一体化仪表盘 + 情报预警闭环 + 草稿/批量导入 + AI 指标推荐\n\n1. 总体目标与边界（V1.5）\n1.1 目标\n\n首页变为一体化工作台：分级汇总表 +（可折叠）趋势图（原技术仪表盘功能并入）\n\n情报全流程升级为**“先填全字段 → 提交 → AI 推荐指标/预警判定 → 人工修正 → 预览 → 发布”**\n\n支持人为新增/编辑预警（发布页与情报总表）\n\n情报总表：更强筛选（领域/来源/类型/重要度/新旧技术/comment/预警）+ 关键词高亮与正文片段展开\n\n上传：支持多领域归属、草稿管理、Excel 批量上传（含模板）\n\n1.2 边界（仍可验收）\n\n统计/趋势/预警口径只基于 published 情报（草稿不入统计）\n\n文献库仍作为只读来源（可转情报草稿，不改变主闭环）\n\nAI：仅做“推荐指标 + 预警建议 + 可解释说明”，最终入库由人工确认\n\n2. 信息架构（页面级）\n\n你现在的页面会调整为 6 个（其中“技术仪表盘”并入首页，不再单独导航）：\n\nindex.html 首页工作台\n\n左：时间筛选（周/月/年 + from/to）+ 领域树/快速跳转\n\n中：分级汇总表（下钻/展开 top10）\n\n右（可折叠面板）：趋势图（自选 X/Y 轴）\n\n支持“一键进入情报总表（带筛选）”\n\ninfo_table.html 情报总表（主工作界面）\n\n左侧筛选器（可隐藏）\n\n顶部：领域快速跳转（输入可选）\n\n搜索框在下一行（你要求）\n\n列表：关键字高亮 + 正文片段（前后展开）+ comment/预警状态标识\n\n支持：人为新增/编辑预警入口\n\nupload_review.html 上传&复核（主闭环）\n\n第一步：填写全部字段（正文在 tags 上面；支持多领域选择）+ comment（上传前）\n\n点击提交：同页出现 AI 推荐指标/预警建议\n\n人工调整指标值/预警状态\n\n若预警 active：强制填写预警内容/结论\n\n预览 → 发布\n\ndrafts.html 本地草稿管理（参考总表 UI）\n\n列表/筛选/编辑/删除/继续提交 AI\n\n草稿存在 LocalStorage（样机）或 DB（上线）\n\nexcel_import.html Excel 批量上传\n\n下载模板按钮\n\n上传 Excel → 预览解析结果 → 校验错误提示 → 批量生成草稿 → 进入 drafts 管理或逐条提交 AI\n\ninfo_detail.html 情报详情（已有）\n\n增加：comment 展示、预警编辑入口（权限控制）\n\n3. 关键交互与业务流程（按你最新口径）\n3.1 首页左侧时间筛选（去掉按钮）\n\nUI：\n\n快捷：近 7 天 / 近 30 天 / 近 365 天 / 自定义\n\n自定义：from/to 仍可编辑\n\n行为：任何变动都自动刷新（不再需要“应用筛选按钮”）\n\n实现细节：\n\n点击快捷选项会同时写入 from/to\n\nfrom/to 手改会自动触发 render（加 300ms debounce 防抖）\n\n3.2 人为增加预警（发布页 & 情报总表）\n\n你要的是：即便不是新技术/超范围，也能人工开预警。\n\n规则建议：\n\n预警入口（按钮）放在：\n\n上传&复核：AI 结果出来后，允许“强制开启预警”\n\n情报总表：每条情报行上有「预警」按钮（无预警→创建；有预警→编辑/解除/延期）\n\n“是否预警”从自动判定 + 人工覆盖组合：\n\nalert_source = auto|manual\n\nmanual_override = true/false\n\n若人工关闭预警，需要填写 manual_dismiss_reason\n\n3.3 上传时可选择多个领域\n\n你现在从单 domain_id 变成 多选 domain_ids：\n\n业务含义：\n\n一条情报可同时属于多个 4 级领域（或允许跨层级但仍建议落到最深层）\n\n统计口径：在各领域树下都计数（注意“总计”会双计，所以下面给你一个避免坑的方案）\n\n统计避免坑（强烈建议）\n\n首页“分级汇总表”的口径要明确：\n\n领域统计 = 去重后的情报数（以情报 id 去重）\n\n或者 领域统计 = 关联数（允许重复计数）\n\n老板一般更喜欢“去重后的情报数”，否则总数对不上。\n\n我建议：\n\n领域行显示：unique_info_count（去重）\n\n鼠标 hover 显示：relations_count（关联次数）\n\n3.4 上传页字段顺序与 AI 阶段\n\n你要的闭环是 “先填完 → 提交 → AI → 人工改 → 预览发布”，并增加“上传前 comment”。\n\n新流程（强制）\n\n填写所有字段（含 comment、领域多选、tags、多选来源/类型、重要度、新旧技术）\n\n点击【提交并生成 AI 建议】\n\n页面下半区出现：\n\nAI 推荐指标（候选列表 + 建议值/单位/来源片段）\n\nAI 预警判定：是否预警、原因（新技术/超范围/人工）\n\n人工修正：\n\n勾选/删除指标、修改数值与单位\n\n选择是否预警\n\n若预警=是：强制填写（预警标题、内容、reviewer_comment、duration）\n\n预览（只读）\n\n发布（写入 published，参与统计）\n\n3.5 情报总表增强（筛选、搜索、高亮、展开）\n\n你提出的点我逐条落地成 UI/行为：\n\n左侧筛选（可隐藏）\n\n领域筛选（树形 + 快速跳转输入可选）\n\n新技术/已有技术（is_new_tech）\n\n来源（source_types 多选）\n\n情报类型（info_types 多选）\n\n重要度（importance_score 范围或多选）\n\n是否预警（has_active_alert）\n\n是否有 comment（has_comment）\n\n时间范围（同首页）\n\n搜索框放下面一行\n\n上一行放“领域快速跳转”\n\n下一行单独放 keyword 搜索（标题+正文+comment）\n\n关键词高亮 + 正文前后展开\n\n展示规则（列表每条情报）：\n\n标题中命中词高亮\n\n正文显示命中附近片段：…前 60 字 + <mark>命中</mark> + 后 60 字…\n\n点击「展开上下文」→ 展开为 400~800 字（仍是片段，不是全文）\n\n点击「全文」→ 进详情页\n\n实现：前端对 content 做一次 indexOf 定位，切片并 wrap <mark>；多命中显示第一个为主（或允许多段）。\n\n3.6 技术仪表盘并入首页（只保留画图趋势、可折叠）\n\n首页右侧/下方加一个可折叠面板：\n\n“趋势图面板”能力\n\n可选 X 轴：时间（published_at）/ 重要度 / 其他可扩展字段\n\n可选 Y 轴：某个指标 value_number（或 count）\n\n支持：\n\n折线（时间 vs 指标值）\n\n柱状（领域 vs 情报数）\n\n散点（时间 vs 指标值，点颜色=预警颜色）\n\n自动折叠：默认收起，用户点击“显示趋势图”展开；展开后页面滚动定位到图表区域\n\nV1.5 样机建议用：\n\n原生 Canvas（你已有）或 ECharts（更快更漂亮）\n\n统一数据源：从 info_items + indicator_values 前端聚合（样机）；上线后改为后端聚合 API\n\n4. 数据模型（PostgreSQL）变更清单\n\n下面按“最小改动 + 可扩展”给你。\n\n4.1 情报：支持多领域\n\n原：info_items.domain_id\n改：多对多\n\ninfo_items 去掉单 domain_id（或保留一个 primary_domain_id 方便默认归属）\n\n新增关联表：\n\ninfo_item_domains\n\ninfo_item_id\n\ndomain_id\n\nis_primary (bool, default false) // 主领域（用于默认展示路径）\n\ncreated_at\n\n建议：必须至少一个 domain_id；且至少一个 is_primary=true\n\n4.2 comment（上传前/总表筛选）\n\ninfo_items\n\nreviewer_comment 你已有预警 comment；现在要的是情报 comment（上传前）\n新增字段：\n\ncomment (text, nullable) // 情报员/上传者的研判、备注\n\nhas_comment (bool derived/cache，可选)\n\n4.3 预警：支持人工创建/覆盖\n\nalerts 增加：\n\nsource enum: auto|manual\n\nmanual_override bool\n\ndismiss_reason text nullable（手动解除原因）\n\n并把“预警是否 active”定义为：\n\nstatus="active" 且（expires_at is null 或 expires_at >= today）\n\n4.4 情报筛选字段索引（上线性能）\n\ninfo_items(status, published_at)\n\ninfo_items(is_new_tech)\n\ninfo_items(importance_score)\n\ninfo_items(content)：上线建议用 PostgreSQL tsvector 做全文检索\n\ninfo_items(source_types jsonb) GIN\n\ninfo_items(info_types jsonb) GIN\n\ninfo_item_domains(domain_id, info_item_id) 复合索引\n\n5. API 设计（V1.5）\n5.1 首页工作台\n\nGET /api/domains/tree\n\nGET /api/summary?root_domain_id=&current_domain_id=&from=&to=\n\n返回：当前层级子域列表统计（去重口径）\n\nGET /api/top-items?kind=info|alert&domain_id=&from=&to=&limit=10&sort=importance|time\n\n5.2 情报总表\n\nGET /api/info-items\n\nfilters:\n\ndomain_id（含子域）\n\nfrom/to\n\nis_new_tech\n\nsource_types[]\n\ninfo_types[]\n\nimportance_min/max\n\nhas_active_alert\n\nhas_comment\n\nq（全文检索）\n\nsort & pagination\n\n5.3 上传&复核（AI 两阶段）\n\nPOST /api/info-items/draft（保存草稿，字段齐全）\n\nPOST /api/info-items/{id}/ai-suggest\n\n输入：title/content/source_url/source_types/info_types/domains/is_new_tech/importance/comment\n\n输出：\n\nindicators_suggestions[]\n\nalert_suggestion: { should_alert, reasons[], color_suggested }\n\nPUT /api/info-items/{id}（人工修订指标/字段）\n\nPOST /api/info-items/{id}/publish\n\n服务端校验：\n\n必填字段齐全\n\n若 should_alert 或 manual alert：预警必填字段齐全\n\n5.4 预警（人为新增/编辑）\n\nPOST /api/alerts（manual 创建）\n\nPUT /api/alerts/{id}（编辑、延期）\n\nPOST /api/alerts/{id}/dismiss（解除+原因）\n\n5.5 草稿管理\n\nGET /api/info-items?status=draft&created_by=me\n\nDELETE /api/info-items/{id}（草稿删除）\n\n（样机阶段 drafts 可纯前端 localStorage，不必上 API）\n\n5.6 Excel 批量上传\n\nGET /api/templates/import.xlsx（下载模板）\n\nPOST /api/import/excel（解析预览，不直接发布）\n\n输出：rows[] + errors[]\n\nPOST /api/import/excel/commit（批量生成 draft）\n\n6. 前端实现方案（你先做样机也能无痛升级）\n\n你现在是静态样机路线，我建议分两层：\n\n6.1 样机阶段（纯前端 JSON）\n\n所有新增功能仍然在前端实现，但把数据结构按“未来 DB/API”设计好（避免重写）\n\n新增 ./data/info_item_domains.json（如果你不想改 info_items.json 结构）\n\n或直接在 info_items.json 里加 domain_ids: [] + primary_domain_id\n\n6.2 上线阶段（前后端分离）\n\n前端只做展示与交互\n\n汇总统计、全文检索、趋势聚合全部放后端\n\nAI 推理由后端调用模型（并缓存）\n\n7. AI 推荐指标 & 预警判定（可解释、可控）\n7.1 AI 输出结构（建议）\n{\n  "indicators": [\n    {\n      "name": "捕集成本",\n      "unit": "USD/tCO2",\n      "suggested_value": 65,\n      "confidence": 0.62,\n      "evidence": "…原文片段…",\n      "note": "来自摘要/新闻段落"\n    }\n  ],\n  "alert": {\n    "should_alert": true,\n    "reasons": ["新技术", "成本显著低于历史范围下限"],\n    "suggested_color": "orange",\n    "explain": "…解释…"\n  }\n}\n\n7.2 人工修订机制\n\n每条指标 suggestion 可：接受/拒绝/改值/改单位\n\n预警 suggestion 可：接受/关闭/改颜色\n\n若预警最终为 true：强制填写预警正文 + reviewer_comment + duration\n\n7.3 缓存（避免重复调用）\n\nai_indicator_suggestions 存模型输出\n\n若草稿内容没变（hash_key 相同），直接复用上次 AI 结果\n\n8. Excel 批量上传（模板 & 校验）\n8.1 模板字段（建议）\n\n必填：\n\ntitle\n\npublished_at\n\nsource_url\n\nsource_types（用分号分隔）\n\ninfo_types（分号）\n\ndomains（用 > 表示路径，或直接填 domain_id；多领域用 ;）\n\nimportance_score\n\nis_new_tech（true/false）\n\ncontent\n可选：\n\ntags（分号）\n\nclassification\n\ncomment\n\nalert_manual（true/false）\n\nalert_title / alert_body / reviewer_comment / duration（如果 alert_manual=true 则必填）\n\n8.2 导入流程\n\n上传 Excel → 解析 → 展示预览表格（高亮错误行）\n\n通过校验 → 批量生成草稿（draft）\n\n进入 drafts.html：逐条点“生成 AI 建议”或批量生成（限流）\n\n9. 权限与审计（你后面要给老板看的“可控”）\n\nRBAC 不变（A/B/C），但新增两个关键控制点：\n\n谁可以“人工开预警/解除预警”（B 可、A 不可、C 全局）\n\n发布必须留下 reviewed_by（即使同一人复核，也要记录）\n\n审计日志至少记录：\n\npublish\n\nalert create/update/dismiss\n\nindicator range update（如果你后续启用范围）\n\n10. 风险点与对策（工程实现层）\n\n多领域导致统计重复\n\n对策：统计按 info_id 去重；同时可展示关联数作为补充\n\n筛选项很多，前端聚合会卡（样机数据一多就明显）\n\n对策：上线后把筛选/聚合移到后端；样机用分页+惰性渲染\n\n高亮与展开会带来 XSS 风险（如果 content 有 HTML）\n\n对策：统一对 content 做 escape，再插入 <mark>（安全处理）\n\nAI 建议与人工修改冲突\n\n对策：AI 结果永远是“候选”，只有人工确认写入 indicator_values\n\n11. V1.5 验收清单（按你这次新增点）\n\n首页：\n\n左侧时间筛选在最上（周/月/年/from/to），无按钮，自动刷新\n\n分级汇总表下钻正常、点击数字展开 top10 正常\n\n右侧趋势图可折叠，能选 X/Y 并绘制\n\n情报总表：\n\n左侧筛选器可隐藏\n\n增加领域快速跳转（输入可选）\n\n筛选：新/旧技术、来源、情报类型、重要度、是否有 comment、是否预警\n\n搜索框在下一行，关键词高亮 + 正文前后展开\n\n支持人为新增/编辑/解除预警\n\n上传&复核：\n\n正文在 tags 上面\n\n上传时可选多个领域\n\n上传前 comment 字段存在 + 总表可筛 has_comment\n\n点击提交后同页出现 AI 指标推荐 + 预警建议\n\n可人工改指标值；预警为 true 时强制补齐预警内容才能发布\n\n草稿：\n\n本地草稿管理页（参考总表）\n\nExcel：\n\n有批量上传入口 + 下载模板 + 预览校验 + 批量生成草稿\n\n如果你愿意，我下一步可以把这套方案“落到你现在的静态样机代码结构”上：\n\n先给你 info_table.html 的完整升级版（因为它牵涉最多：筛选器/高亮/展开/预警按钮）\n\n再给你 upload_review.html 的两阶段 AI UI（提交后出现 AI 面板、强制预警字段校验）\n\n最后给你 drafts.html + excel_import.html（模板字段我也能给你生成一份 demo xlsx 结构说明）\n\n你想先从哪个页面开始改？我建议顺序：上传&复核 → 总表 → 首页合并趋势图。 我准备做这样一个数据平台的项目 告诉我要怎么一步步做
+之前已经生成了一些网页文件 你可以改 需要的 改动如下：人为增加预警功能（发布和情报总表），情报总表增加领域快速跳转（输入可选）框，上传时可选择多个领域
+首页左边时间筛选放在上面近一周月年 from to  下面按钮都去掉 上传情报时候正文放标签上面 情报总表加上领域筛选（左侧可以隐藏） 筛选新技术和已有技术 增加筛选选项 来源 情报类型 重要度 搜索框放在下面一行 关键词高亮后前后正文展开功能 技术仪表盘合并到分级汇总表里面 就保留画图趋势功能可以自己选择xy轴 自动折叠看画图界面 总表加筛选器是否有comment 情报上传前增加comment选项 先填写所有的东西 点击提交之后相同页面出现ai推荐指标 自动说明是否有预警 如果不对 人工可以改数值 如果有预警的话强制写内容 然后才能预览和发布 情报上传本地草稿管理页面 参考情报总表界面 另外情报上传要有excel批量上传按钮 并且提供模板
