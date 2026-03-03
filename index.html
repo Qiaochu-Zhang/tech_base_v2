@@ -182,6 +182,10 @@
       font-weight:800;
       color:#bfe6ff;
     }
+    .tree-node.current{
+      font-weight:800;
+      color:#ffd27a;
+    }
     .tree-indent{
       width: 16px;
       flex: 0 0 16px;
@@ -367,6 +371,7 @@
 <script type="module">
   const $ = s => document.querySelector(s);
   const publishedKey = "published_items";
+  const rootKey = "root_domain_id";
 
   // ---------------- URL helpers ----------------
   function sp(){ return new URLSearchParams(location.search); }
@@ -539,7 +544,7 @@
   }
 
   // ---------------- Tree dropdown (root selector) ----------------
-  function renderRootTree(domains, domainMap, rootId, setRootId){
+  function renderRootTree(domains, domainMap, rootId, currentId, setRootId){
     const box = $("#rootTree");
     box.innerHTML = "";
 
@@ -575,7 +580,9 @@
       row.appendChild(toggle);
 
       const label = document.createElement("div");
-      label.className = "tree-node" + (node.id === rootId ? " active" : "");
+      label.className = "tree-node" +
+        (node.id === rootId ? " active" : "") +
+        (node.id === currentId ? " current" : "");
       label.textContent = `L${node.level} · ${node.name}`;
       label.title = domainPath(node.id, domainMap);
       label.addEventListener("click", ()=>{
@@ -599,7 +606,7 @@
     rootToggle.className = "tree-toggle empty";
     rootToggle.textContent = "·";
     const rootLabel = document.createElement("div");
-    rootLabel.className = "tree-node" + (!rootId ? " active" : "");
+    rootLabel.className = "tree-node" + (!rootId ? " active" : "") + (!currentId && !rootId ? " current" : "");
     rootLabel.textContent = "ROOT · 最上层（全部一级领域）";
     rootLabel.title = "统计所有一级领域";
     rootLabel.addEventListener("click", ()=> setRootId(null));
@@ -682,8 +689,10 @@
 
       const domainMap = buildDomainMap(domains);
 
+      const storedRoot = localStorage.getItem(rootKey) || "";
       // state: rootId (null means ROOT)
-      let rootId = qp("root_id") || null;
+      let rootId = qp("root_id") || storedRoot || null;
+      if(rootId && !domainMap.get(rootId)) rootId = null;
       // state: current browsing domainId for drill-down
       let currentId = qp("domain_id") || null;
 
@@ -712,14 +721,19 @@
         $("#rangeText").textContent = `${$("#fromDate").value || "全部"} ~ ${$("#toDate").value || "全部"}`;
       }
 
-      // render root tree
-      renderRootTree(domains, domainMap, rootId, (newRootId)=>{
-        rootId = newRootId;
-        currentId = null;
-        setQuery({ root_id: rootId || "", domain_id: "" });
-        syncLeft();
-        renderTableAndResetExpand();
-      });
+      function renderRootAndTree(){
+        renderRootTree(domains, domainMap, rootId, currentId, (newRootId)=>{
+          rootId = newRootId;
+          localStorage.setItem(rootKey, rootId || "");
+          currentId = null;
+          setQuery({ root_id: rootId || "", domain_id: "" });
+          syncLeft();
+          renderTableAndResetExpand();
+          renderRootAndTree();
+        });
+      }
+
+      renderRootAndTree();
 
       function visibleChildrenIds(parentId){
         const CHILDREN = buildChildrenIndex(domains);
@@ -752,6 +766,16 @@
       function renderTableAndResetExpand(){
         $("#expandPanel").style.display = "none";
         renderSummaryTable();
+        renderTrendChart();
+      }
+
+      function filterExpandItems(items, domainId, filterType, alertOnly, toDate, alerts){
+        const subtree = collectSubtreeIds(domainId, domains);
+        let list = items.filter(i => isItemInSubtree(i, subtree));
+        if(filterType === "tech") list = list.filter(isTech);
+        if(filterType === "policy") list = list.filter(isPolicy);
+        if(alertOnly) list = list.filter(i => !!getActiveAlertByInfoId(i.id, alerts, toDate));
+        return list;
       }
 
       function renderSummaryTable(){
@@ -780,19 +804,21 @@
                <div class="muted small">${domainPath(domainId, domainMap)}</div>`;
           tr.appendChild(nameTd);
 
-          const makeNum = (n, kind, did) => {
+          const makeNum = (n, did, filterType, alertOnly, labelText) => {
             const span = document.createElement("span");
             span.className = "clicknum";
-            span.setAttribute("data-kind", kind);
-            span.setAttribute("data-did", did || "");
+            span.setAttribute("data-domain-id", did || "");
+            span.setAttribute("data-filter-type", filterType || "");
+            span.setAttribute("data-alert-only", alertOnly ? "true" : "false");
+            span.setAttribute("data-label", labelText);
             span.textContent = String(n);
             return span;
           };
 
-          const tdTotal = document.createElement("td"); tdTotal.appendChild(makeNum(counts.total, "info", domainId||"")); tr.appendChild(tdTotal);
-          const tdTech = document.createElement("td"); tdTech.appendChild(makeNum(counts.tech, "info", domainId||"")); tr.appendChild(tdTech);
-          const tdAlert = document.createElement("td"); tdAlert.appendChild(makeNum(counts.alert, "alert", domainId||"")); tr.appendChild(tdAlert);
-          const tdPolicy = document.createElement("td"); tdPolicy.appendChild(makeNum(counts.policy, "info", domainId||"")); tr.appendChild(tdPolicy);
+          const tdTotal = document.createElement("td"); tdTotal.appendChild(makeNum(counts.total, domainId||"", "", false, "情报总数")); tr.appendChild(tdTotal);
+          const tdTech = document.createElement("td"); tdTech.appendChild(makeNum(counts.tech, domainId||"", "tech", false, "技术情报")); tr.appendChild(tdTech);
+          const tdAlert = document.createElement("td"); tdAlert.appendChild(makeNum(counts.alert, domainId||"", "", true, "技术预警（active）")); tr.appendChild(tdAlert);
+          const tdPolicy = document.createElement("td"); tdPolicy.appendChild(makeNum(counts.policy, domainId||"", "policy", false, "政策情报")); tr.appendChild(tdPolicy);
 
           tbody.appendChild(tr);
         }
@@ -828,23 +854,23 @@
             setQuery({ domain_id: currentId });
             syncLeft();
             renderTableAndResetExpand();
+            renderRootAndTree();
           });
         });
 
         // expand top10
         tbody.querySelectorAll(".clicknum").forEach(el=>{
           el.addEventListener("click", ()=>{
-            const kind = el.getAttribute("data-kind"); // info | alert
-            const did = el.getAttribute("data-did") || null;
+            const did = el.getAttribute("data-domain-id") || null;
+            const filterType = el.getAttribute("data-filter-type") || "";
+            const alertOnly = el.getAttribute("data-alert-only") === "true";
+            const labelText = el.getAttribute("data-label") || "情报";
             const targetDomainId = did ? did : (currentId ? currentId : (rootId ? rootId : null));
 
-            const targetSubtree = collectSubtreeIds(targetDomainId, domains);
-            const scopeItems2 = items.filter(i => isItemInSubtree(i, targetSubtree));
-            const sorted = sortByImportanceThenTime(scopeItems2);
-
-            const t = (kind==="alert")
-              ? `预警 Top10（${domainPath(targetDomainId, domainMap)}）`
-              : `情报 Top10（${domainPath(targetDomainId, domainMap)}）`;
+            const filtered = filterExpandItems(items, targetDomainId, filterType, alertOnly, to, alerts);
+            const sorted = sortByImportanceThenTime(filtered);
+            const kind = alertOnly ? "alert" : "info";
+            const t = `${labelText}（${domainPath(targetDomainId, domainMap)}）`;
 
             showExpand(kind, targetDomainId, t, sorted, domainMap, alerts, to);
           });
@@ -922,7 +948,8 @@
         const yMode = $("#trendY").value;
         const from = $("#fromDate").value;
         const to = $("#toDate").value;
-        const rootSubtree = collectSubtreeIds(rootId, domains);
+        const targetId = currentId ? currentId : rootId;
+        const rootSubtree = collectSubtreeIds(targetId, domains);
 
         const items = infoItemsRaw.filter(i =>
           i.status === "published" &&

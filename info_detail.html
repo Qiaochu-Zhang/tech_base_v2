@@ -243,6 +243,7 @@ Open: info_detail.html?id=INFO_CCUS_0001
     <div class="actions" style="margin: 10px 0 14px;">
       <button class="btn" id="btnBack">← 返回</button>
       <button class="btn" id="btnCopyLink">复制当前链接</button>
+      <button class="btn" id="btnCreateRevision">创建修订稿</button>
       <span class="badge"><b>ID</b> <span id="infoId">-</span></span>
       <span class="badge"><b>状态</b> <span id="status">-</span></span>
     </div>
@@ -266,6 +267,41 @@ Open: info_detail.html?id=INFO_CCUS_0001
               <span class="pill" id="alertPill" style="display:none;"><span class="dot"></span>预警</span>
               <span class="pill"><span class="dot" style="background:#60a5fa;"></span>重要度 <span id="importanceScore">-</span></span>
               <span class="pill"><span class="dot" style="background:#34d399;"></span><span id="novelty">-</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hd">
+            <div>
+              <div style="font-weight:700;">正文</div>
+              <div class="muted small">样机：支持换行与段落。后续可加“折叠/展开”“复制摘要”等。</div>
+            </div>
+            <button class="btn" id="btnToggleContent">折叠</button>
+          </div>
+          <div class="bd">
+            <div id="content" class="content">-</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hd">
+            <div>
+              <div style="font-weight:700;">指标</div>
+              <div class="muted small">指标名称来自字典（indicator_defs），指标数值绑定情报（indicator_values）。</div>
+            </div>
+          </div>
+          <div class="bd">
+            <div id="indicatorsEmpty" class="muted" style="display:none;">暂无指标</div>
+            <div id="indicatorsTableWrap" style="overflow:auto;"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hd">
+            <div>
+              <div style="font-weight:700;">详细信息</div>
+              <div class="muted small">来源、类型、标签、comment、密级与上传复核信息。</div>
             </div>
           </div>
           <div class="bd">
@@ -297,32 +333,6 @@ Open: info_detail.html?id=INFO_CCUS_0001
               <div class="k">上传/复核</div>
               <div class="v"><span class="muted">上传：</span><span id="createdBy">-</span>　<span class="muted">复核：</span><span id="reviewedBy">-</span></div>
             </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="hd">
-            <div>
-              <div style="font-weight:700;">正文</div>
-              <div class="muted small">样机：支持换行与段落。后续可加“折叠/展开”“复制摘要”等。</div>
-            </div>
-            <button class="btn" id="btnToggleContent">折叠</button>
-          </div>
-          <div class="bd">
-            <div id="content" class="content">-</div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="hd">
-            <div>
-              <div style="font-weight:700;">指标</div>
-              <div class="muted small">指标名称来自字典（indicator_defs），指标数值绑定情报（indicator_values）。</div>
-            </div>
-          </div>
-          <div class="bd">
-            <div id="indicatorsEmpty" class="muted" style="display:none;">暂无指标</div>
-            <div id="indicatorsTableWrap" style="overflow:auto;"></div>
           </div>
         </div>
       </div>
@@ -359,21 +369,6 @@ Open: info_detail.html?id=INFO_CCUS_0001
               <button class="btn" id="btnManualAlert">人工编辑预警</button>
               <button class="btn" id="btnSimExtend">模拟：延期</button>
               <button class="btn" id="btnSimDismiss">模拟：解除</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="hd">
-            <div style="font-weight:700;">快速跳转</div>
-          </div>
-          <div class="bd">
-            <div class="muted small" style="margin-bottom:10px;">样机：用 query 参数模拟“带筛选跳转”。</div>
-            <div class="actions">
-              <button class="btn" id="btnGoTable">去情报总表（同领域）</button>
-              <button class="btn" id="btnGoHome">去首页工作台</button>
-              <button class="btn" id="btnCreateRevision">创建修订稿（模拟）</button>
-              <button class="btn" id="btnEditDraft">编辑草稿（模拟）</button>
             </div>
           </div>
         </div>
@@ -439,6 +434,7 @@ Open: info_detail.html?id=INFO_CCUS_0001
   <script type="module">
     // ---------- tiny utils ----------
     const $ = (sel) => document.querySelector(sel);
+    const API_BASE = window.API_BASE || "http://127.0.0.1:8000/api";
     const escapeHtml = (s) => (s ?? "").replace(/[&<>"']/g, c => ({
       "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
     }[c]));
@@ -508,6 +504,11 @@ Open: info_detail.html?id=INFO_CCUS_0001
       if(!r.ok) throw new Error(`加载失败：${path} (${r.status})`);
       return await r.json();
     }
+    async function loadApi(path){
+      const r = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
+      if(!r.ok) throw new Error(`API加载失败：${path} (${r.status})`);
+      return await r.json();
+    }
 
     async function main(){
       const id = getQueryParam("id") || "INFO_CCUS_0001";
@@ -515,23 +516,26 @@ Open: info_detail.html?id=INFO_CCUS_0001
 
       try{
         const [
-          domains,
-          infoItems,
+          domainTree,
+          info,
           alerts,
           indicatorDefs,
           indicatorValues
         ] = await Promise.all([
-          loadJson("./data/domains.json"),
-          loadJson("./data/info_items.json"),
+          loadApi("/domains/tree"),
+          loadApi(`/info-items/${encodeURIComponent(id)}`),
           loadJson("./data/alerts.json"),
           loadJson("./data/indicator_defs.json"),
           loadJson("./data/indicator_values.json")
         ]);
 
-        const info = infoItems.find(x => x.id === id);
-        if(!info){
-          throw new Error(`找不到情报：${id}（请检查 info_items.json 是否包含该 id）`);
-        }
+        const domains = [];
+        (function flatten(nodes){
+          (nodes || []).forEach(node => {
+            domains.push({ id: node.id, name: node.name, parent_id: node.parent_id ?? null });
+            flatten(node.children || []);
+          });
+        })(domainTree);
 
         const domainMap = buildDomainMap(domains);
         const manualAlerts = JSON.parse(localStorage.getItem(manualKey) || "{}");
@@ -674,18 +678,16 @@ Open: info_detail.html?id=INFO_CCUS_0001
           $("#btnToggleContent").textContent = contentCollapsed ? "展开" : "折叠";
         };
 
-        // quick jump buttons (simulate “carry filters”)
-        const from = getQueryParam("from") || "2025-12-01";
-        const to = getQueryParam("to") || "2026-01-06";
-        $("#btnGoTable").onclick = () => {
-          const domainIds = getDomainIds(info);
-          const q = new URLSearchParams({ domain_id: domainIds[0] || "", from, to });
-          window.location.href = `info_table.html?${q.toString()}`;
-        };
-        $("#btnGoHome").onclick = () => {
-          // If your CCUS L1 id differs, change here:
-          const q = new URLSearchParams({ domain_id: "DOM_CCUS_L1", from, to });
-          window.location.href = `index.html?${q.toString()}`;
+        $("#btnCreateRevision").onclick = () => {
+          const revisionPayload = {
+            ...info,
+            id: "",
+            status: "draft",
+            revision_of: info.id,
+            revision_mode: true
+          };
+          localStorage.setItem("currentDraft", JSON.stringify(revisionPayload));
+          window.location.href = "upload_review.html?mode=revision";
         };
 
         // simulate alert actions

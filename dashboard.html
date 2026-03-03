@@ -635,13 +635,23 @@ const CHILDREN = buildChildrenIndex(domains);
 // expanded set: store node ids that are expanded
 const expanded = new Set();
 
-// 默认：展开到当前 domainId 的路径（这样用户进来就能看到选中项在哪里）
+// 仅展开到当前 domainId 的路径（其他路径保持折叠）
 function expandTo(domainId){
+  expanded.clear();
   let cur = domainMap.get(domainId);
   while(cur && cur.parent_id){
     expanded.add(cur.parent_id);
     cur = domainMap.get(cur.parent_id);
   }
+}
+
+function applyDomainSelection(nextId){
+  domainId = nextId;
+  setQuery({ domain_id: domainId });
+  syncHeader();
+  renderAll();
+  expandTo(domainId);
+  renderTree();
 }
 
 function hasChildren(id){
@@ -676,9 +686,7 @@ function renderTree(){
     if(expandable){
       toggle.addEventListener("click", (e)=>{
         e.stopPropagation();
-        if(expanded.has(node.id)) expanded.delete(node.id);
-        else expanded.add(node.id);
-        renderTree();
+        applyDomainSelection(node.id);
       });
     }
     row.appendChild(toggle);
@@ -689,13 +697,7 @@ function renderTree(){
     label.textContent = `L${node.level} · ${node.name}`;
     label.title = domainPath(node.id, domainMap);
     label.addEventListener("click", ()=>{
-      domainId = node.id;
-      setQuery({ domain_id: domainId });
-      syncHeader();
-      renderAll();
-      // 选中后也把路径展开，保证可见
-      expandTo(domainId);
-      renderTree();
+      applyDomainSelection(node.id);
     });
     row.appendChild(label);
 
@@ -771,14 +773,9 @@ renderTree();
           chip.textContent = `${d.name}（L${d.level}）`;
           chip.title = domainPath(d.id, domainMap);
           chip.addEventListener("click", ()=>{
-  domainId = d.id;
   $("#domainSearch").value = "";
   $("#domainSearchResults").innerHTML = "";
-  setQuery({ domain_id: domainId });
-  syncHeader();
-  renderAll();
-  expandTo(domainId);
-  renderTree();
+  applyDomainSelection(d.id);
 });
 
           box.appendChild(chip);
