@@ -198,6 +198,14 @@
         <label>情报 comment（上传前）</label>
         <input id="comment" placeholder="上传者研判 / 备注" />
 
+        <label>密级（上传者可调整）</label>
+        <select id="classification">
+          <option value="公开">公开</option>
+          <option value="内部" selected>内部</option>
+          <option value="秘密">秘密</option>
+          <option value="机密">机密</option>
+        </select>
+
         <label>是否新技术</label>
         <select id="is_new_tech">
           <option value="true">新技术（可能触发预警）</option>
@@ -326,7 +334,8 @@
     aiShouldAlert: false,
     aiReasons: [],
     manualAlert: false,
-    currentDraftId: null
+    currentDraftId: null,
+    revisionMode: false
   };
 
   function showWarn(msg){
@@ -461,6 +470,7 @@
       domain_ids: getSelectedDomains(),
       tags: $("#tags").value.split(/[,，]/).map(t => t.trim()).filter(Boolean),
       comment: $("#comment").value.trim(),
+      classification: $("#classification").value,
       is_new_tech: $("#is_new_tech").value === "true",
       importance_score: Number($("#importance_score").value)
     };
@@ -622,6 +632,7 @@
       <div class="muted small" style="margin-top:6px;">发布时间：${form.published_at} / 重要度：${form.importance_score}</div>
       <div style="margin-top:10px; white-space:pre-wrap;">${escapeHtml(form.content || "-")}</div>
       <div style="margin-top:10px;">领域：${form.domain_ids.join("、") || "-"}</div>
+      <div style="margin-top:10px;">密级：${escapeHtml(form.classification || "-")}</div>
       <div style="margin-top:10px;">comment：${escapeHtml(form.comment || "-")}</div>
       <div style="margin-top:10px;">指标：${indicators.map(i => `${i.name} ${i.value}${i.unit}`).join("；") || "-"}</div>
       <div style="margin-top:10px;">预警：${alertOn ? "是" : "否"}</div>
@@ -690,7 +701,7 @@
       return;
     }
     const now = new Date().toISOString();
-    const infoId = state.currentDraftId || `INFO_${Date.now()}`;
+    const infoId = state.currentDraftId && !state.revisionMode ? state.currentDraftId : `INFO_${Date.now()}`;
     const list = JSON.parse(localStorage.getItem(publishedKey) || "[]");
     const idx = list.findIndex(item => item.id === infoId);
     const createdAt = idx >= 0 ? list[idx].created_at : now;
@@ -747,13 +758,15 @@
     if(draftPayload){
       const draft = JSON.parse(draftPayload);
       localStorage.removeItem("currentDraft");
-      state.currentDraftId = draft.id || null;
+      state.revisionMode = !!draft.revision_mode;
+      state.currentDraftId = state.revisionMode ? null : (draft.id || null);
       $("#title").value = draft.title || "";
       $("#published_at").value = draft.published_at || $("#published_at").value;
       $("#content").value = draft.content || "";
       $("#source_url").value = draft.source_url || "";
       $("#tags").value = (draft.tags || []).join(", ");
       $("#comment").value = draft.comment || "";
+      $("#classification").value = draft.classification || "内部";
       $("#is_new_tech").value = String(draft.is_new_tech ?? true);
       $("#importance_score").value = String(draft.importance_score || 4);
       document.querySelectorAll("#sourceChips .chip").forEach(ch => {
