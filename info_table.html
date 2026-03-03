@@ -334,8 +334,18 @@
 
   const manualStorageKey = "manualAlerts";
   const publishedKey = "published_items";
+  const deletedKey = "deleted_info_ids";
   const loadManualAlerts = () => JSON.parse(localStorage.getItem(manualStorageKey) || "{}");
   const saveManualAlerts = data => localStorage.setItem(manualStorageKey, JSON.stringify(data));
+  const loadDeletedIds = () => {
+    try{
+      const list = JSON.parse(localStorage.getItem(deletedKey) || "[]");
+      return new Set(Array.isArray(list) ? list : []);
+    }catch{
+      return new Set();
+    }
+  };
+  const saveDeletedIds = set => localStorage.setItem(deletedKey, JSON.stringify(Array.from(set)));
 
   function qp(name){
     return new URLSearchParams(location.search).get(name);
@@ -633,8 +643,27 @@
       render();
     });
 
+    function deleteInfo(info){
+      if(!confirm(`确认删除情报「${info.title || info.id}」？`)) return;
+
+      const published = loadLocalPublished().filter(item => item.id !== info.id);
+      localStorage.setItem(publishedKey, JSON.stringify(published));
+
+      const deletedIds = loadDeletedIds();
+      deletedIds.add(info.id);
+      saveDeletedIds(deletedIds);
+
+      const manualAlerts = loadManualAlerts();
+      if(manualAlerts[info.id]){
+        delete manualAlerts[info.id];
+        saveManualAlerts(manualAlerts);
+      }
+      render();
+    }
+
     function render(){
-      const infosLive = getPublishedItems(mergeInfoItems(infos, loadLocalPublished()));
+      const deletedIds = loadDeletedIds();
+      const infosLive = getPublishedItems(mergeInfoItems(infos, loadLocalPublished())).filter(item => !deletedIds.has(item.id));
       const from = $("#fromDate").value;
       const to = $("#toDate").value;
       const domainId = $("#domainFilter").value;
@@ -721,6 +750,7 @@
           <td>${(info.source_types || []).join("、") || "-"}</td>
           <td>
             <button class="btn" data-alert>${alert ? "编辑预警" : "新增预警"}</button>
+            <button class="btn" data-delete>删除情报</button>
           </td>
         `;
 
@@ -733,6 +763,7 @@
         });
 
         tr.querySelector("[data-alert]").addEventListener("click", () => openModal(info));
+        tr.querySelector("[data-delete]").addEventListener("click", () => deleteInfo(info));
 
         tbody.appendChild(tr);
       });
