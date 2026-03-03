@@ -331,21 +331,7 @@
 <script type="module">
   const $ = s => document.querySelector(s);
   const escapeHtml = str => str.replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
-
-  const manualStorageKey = "manualAlerts";
-  const publishedKey = "published_items";
-  const deletedKey = "deleted_info_ids";
-  const loadManualAlerts = () => JSON.parse(localStorage.getItem(manualStorageKey) || "{}");
-  const saveManualAlerts = data => localStorage.setItem(manualStorageKey, JSON.stringify(data));
-  const loadDeletedIds = () => {
-    try{
-      const list = JSON.parse(localStorage.getItem(deletedKey) || "[]");
-      return new Set(Array.isArray(list) ? list : []);
-    }catch{
-      return new Set();
-    }
-  };
-  const saveDeletedIds = set => localStorage.setItem(deletedKey, JSON.stringify(Array.from(set)));
+  const API_BASE = window.API_BASE || "http://127.0.0.1:8000/api";
 
   function qp(name){
     return new URLSearchParams(location.search).get(name);
@@ -356,33 +342,12 @@
     return d.slice(0,10);
   }
 
-  async function loadJson(p){
-    const r = await fetch(p, { cache: "no-store" });
-    return await r.json();
-  }
-
-  function loadLocalPublished(){
-    try{
-      const list = JSON.parse(localStorage.getItem(publishedKey) || "[]");
-      return Array.isArray(list) ? list.filter(i => i && i.status === "published") : [];
-    } catch {
-      return [];
+  async function loadApi(path){
+    const r = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
+    if(!r.ok){
+      throw new Error(`API请求失败: ${path} (${r.status})`);
     }
-  }
-
-  function mergeInfoItems(baseItems, localItems){
-    const map = new Map();
-    (baseItems || []).forEach(item => {
-      if(item && item.id) map.set(item.id, item);
-    });
-    (localItems || []).forEach(item => {
-      if(item && item.id) map.set(item.id, item);
-    });
-    return Array.from(map.values());
-  }
-
-  function getPublishedItems(items){
-    return (items || []).filter(item => item && item.status === "published");
+    return await r.json();
   }
 
   function inDateRange(date, from, to){
@@ -463,14 +428,17 @@
   }
 
   async function main(){
-    let [infos, alerts, domains] = await Promise.all([
-      loadJson("./data/info_items.json"),
-      loadJson("./data/alerts.json"),
-      loadJson("./data/domains.json")
+    let [infos, domainTree] = await Promise.all([
+      loadApi("/info-items?status=published"),
+      loadApi("/domains/tree")
     ]);
-
-    const localPublished = loadLocalPublished();
-    infos = getPublishedItems(mergeInfoItems(infos, localPublished));
+    const domains = [];
+    (function flatten(nodes){
+      (nodes || []).forEach(node => {
+        domains.push({ id: node.id, name: node.name, parent_id: node.parent_id ?? null });
+        flatten(node.children || []);
+      });
+    })(domainTree);
 
     const domainMap = Object.fromEntries(domains.map(d=>[d.id,d]));
 
@@ -497,10 +465,6 @@
       return out;
     }
 
-
-    
-    const manualAlerts = loadManualAlerts();
-
     function domainPath(id){
       const arr=[];
       let cur=domainMap[id];
@@ -512,9 +476,7 @@
     }
 
     function hasActiveAlert(infoId){
-      const manual = manualAlerts[infoId];
-      if(manual && manual.status === "active") return manual;
-      return alerts.find(a => a.info_item_id === infoId && a.status === "active") || null;
+      return null;
     }
 
     const uniqueSources = Array.from(new Set(infos.flatMap(i => i.source_types || [])));
@@ -595,13 +557,7 @@
 
     function openModal(info){
       currentInfoId = info.id;
-      const existing = manualAlerts[info.id] || {};
-      $("#modalTitle").textContent = info.title;
-      $("#alertTitle").value = existing.alert_title || "";
-      $("#alertBody").value = existing.alert_body || "";
-      $("#alertColor").value = existing.alert_color || "orange";
-      $("#dismissReason").value = "";
-      $("#alertModal").style.display = "flex";
+      alert("预警后端接口未接入，本页暂不支持保存预警。");
     }
 
     $("#btnCloseModal").addEventListener("click", () => {
@@ -609,61 +565,29 @@
     });
 
     $("#btnSaveAlert").addEventListener("click", () => {
-      if(!currentInfoId) return;
-      manualAlerts[currentInfoId] = {
-        info_item_id: currentInfoId,
-        alert_title: $("#alertTitle").value.trim() || "人工预警",
-        alert_body: $("#alertBody").value.trim() || "人工补充说明",
-        alert_color: $("#alertColor").value,
-        status: "active",
-        source: "manual",
-        manual_override: true
-      };
-      saveManualAlerts(manualAlerts);
       $("#alertModal").style.display = "none";
-      render();
     });
 
     $("#btnDismissAlert").addEventListener("click", () => {
-      if(!currentInfoId) return;
-      const reason = $("#dismissReason").value.trim();
-      if(!reason){
-        alert("请填写解除原因");
-        return;
-      }
-      manualAlerts[currentInfoId] = {
-        info_item_id: currentInfoId,
-        status: "dismissed",
-        dismiss_reason: reason,
-        source: "manual",
-        manual_override: true
-      };
-      saveManualAlerts(manualAlerts);
       $("#alertModal").style.display = "none";
-      render();
     });
 
-    function deleteInfo(info){
+    async function deleteInfo(info){
       if(!confirm(`确认删除情报「${info.title || info.id}」？`)) return;
-
-      const published = loadLocalPublished().filter(item => item.id !== info.id);
-      localStorage.setItem(publishedKey, JSON.stringify(published));
-
-      const deletedIds = loadDeletedIds();
-      deletedIds.add(info.id);
-      saveDeletedIds(deletedIds);
-
-      const manualAlerts = loadManualAlerts();
-      if(manualAlerts[info.id]){
-        delete manualAlerts[info.id];
-        saveManualAlerts(manualAlerts);
+      try{
+        const r = await fetch(`${API_BASE}/info-items/${encodeURIComponent(info.id)}`, { method: "DELETE" });
+        if(!r.ok && r.status !== 204){
+          throw new Error(`删除失败 (${r.status})`);
+        }
+        infos = infos.filter(item => item.id !== info.id);
+        render();
+      }catch(err){
+        alert(err?.message || "删除失败");
       }
-      render();
     }
 
     function render(){
-      const deletedIds = loadDeletedIds();
-      const infosLive = getPublishedItems(mergeInfoItems(infos, loadLocalPublished())).filter(item => !deletedIds.has(item.id));
+      const infosLive = (infos || []).filter(item => item && item.status === "published");
       const from = $("#fromDate").value;
       const to = $("#toDate").value;
       const domainId = $("#domainFilter").value;

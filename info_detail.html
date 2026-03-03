@@ -434,12 +434,11 @@ Open: info_detail.html?id=INFO_CCUS_0001
   <script type="module">
     // ---------- tiny utils ----------
     const $ = (sel) => document.querySelector(sel);
+    const API_BASE = window.API_BASE || "http://127.0.0.1:8000/api";
     const escapeHtml = (s) => (s ?? "").replace(/[&<>"']/g, c => ({
       "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
     }[c]));
     const manualKey = "manualAlerts";
-    const draftKey = "drafts";
-    const publishedKey = "published_items";
 
     function getDomainIds(item){
       if(Array.isArray(item.domain_ids) && item.domain_ids.length){
@@ -483,15 +482,6 @@ Open: info_detail.html?id=INFO_CCUS_0001
       }
     }
 
-    function readLocalList(key){
-      try{
-        const raw = JSON.parse(localStorage.getItem(key) || "[]");
-        return Array.isArray(raw) ? raw : [];
-      }catch{
-        return [];
-      }
-    }
-
     // Domain path: walk parent chain
     function buildDomainMap(domains){
       const map = new Map();
@@ -514,35 +504,38 @@ Open: info_detail.html?id=INFO_CCUS_0001
       if(!r.ok) throw new Error(`加载失败：${path} (${r.status})`);
       return await r.json();
     }
+    async function loadApi(path){
+      const r = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
+      if(!r.ok) throw new Error(`API加载失败：${path} (${r.status})`);
+      return await r.json();
+    }
 
     async function main(){
       const id = getQueryParam("id") || "INFO_CCUS_0001";
       $("#infoId").textContent = id;
 
       try{
-        const localDrafts = readLocalList(draftKey);
-        const localPublished = readLocalList(publishedKey);
-
         const [
-          domains,
-          infoItems,
+          domainTree,
+          info,
           alerts,
           indicatorDefs,
           indicatorValues
         ] = await Promise.all([
-          loadJson("./data/domains.json"),
-          loadJson("./data/info_items.json"),
+          loadApi("/domains/tree"),
+          loadApi(`/info-items/${encodeURIComponent(id)}`),
           loadJson("./data/alerts.json"),
           loadJson("./data/indicator_defs.json"),
           loadJson("./data/indicator_values.json")
         ]);
 
-        let info = localDrafts.find(x => x.id === id);
-        if(!info) info = localPublished.find(x => x.id === id);
-        if(!info) info = infoItems.find(x => x.id === id);
-        if(!info){
-          throw new Error(`找不到情报：${id}（请检查本地草稿/发布或 info_items.json 是否包含该 id）`);
-        }
+        const domains = [];
+        (function flatten(nodes){
+          (nodes || []).forEach(node => {
+            domains.push({ id: node.id, name: node.name, parent_id: node.parent_id ?? null });
+            flatten(node.children || []);
+          });
+        })(domainTree);
 
         const domainMap = buildDomainMap(domains);
         const manualAlerts = JSON.parse(localStorage.getItem(manualKey) || "{}");

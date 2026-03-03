@@ -316,14 +316,26 @@
   import { extractIndicators } from "./lib/extractor.js";
 
   const $ = s => document.querySelector(s);
+  const API_BASE = window.API_BASE || "http://127.0.0.1:8000/api";
   const draftKey = "drafts";
-  const publishedKey = "published_items";
   const manualStorageKey = "manualAlerts";
 
   const escapeHtml = str => str.replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
 
   async function loadJson(p){
     const r = await fetch(p, { cache: "no-store" });
+    return await r.json();
+  }
+  async function loadApi(path, options = {}){
+    const r = await fetch(`${API_BASE}${path}`, {
+      cache: "no-store",
+      ...options
+    });
+    if(!r.ok){
+      const text = await r.text();
+      throw new Error(`API请求失败 (${r.status}) ${text}`);
+    }
+    if(r.status === 204) return null;
     return await r.json();
   }
 
@@ -692,7 +704,7 @@
     showPreview();
   });
 
-  $("#btnPublish").addEventListener("click", () => {
+  $("#btnPublish").addEventListener("click", async () => {
     clearWarn();
     const form = getForm();
     const error = validateAction(form, "publish");
@@ -700,20 +712,35 @@
       showWarn(error);
       return;
     }
-    const now = new Date().toISOString();
-    const infoId = state.currentDraftId && !state.revisionMode ? state.currentDraftId : `INFO_${Date.now()}`;
-    const list = JSON.parse(localStorage.getItem(publishedKey) || "[]");
-    const idx = list.findIndex(item => item.id === infoId);
-    const createdAt = idx >= 0 ? list[idx].created_at : now;
-    const payload = { id: infoId, ...form, created_at: createdAt, updated_at: now, status: "published" };
-    if(idx >= 0){
-      list[idx] = payload;
-    } else {
-      list.unshift(payload);
+    let created = null;
+    try{
+      created = await loadApi("/info-items/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: form.title,
+          content: form.content,
+          source_url: form.source_url || null,
+          published_at: form.published_at ? `${form.published_at}T00:00:00Z` : null,
+          importance_score: form.importance_score,
+          is_new_tech: form.is_new_tech,
+          comment: form.comment || null,
+          source_types: form.source_types,
+          info_types: form.info_types,
+          tags: form.tags,
+          domain_ids: form.domain_ids,
+          classification: form.classification || null
+        })
+      });
+    }catch(err){
+      showWarn(err?.message || "发布失败");
+      return;
     }
-    localStorage.setItem(publishedKey, JSON.stringify(list));
+
+    const now = new Date().toISOString();
+    const infoId = created?.id;
     const manualAlerts = JSON.parse(localStorage.getItem(manualStorageKey) || "{}");
-    if(isAlertEnabled()){
+    if(infoId && isAlertEnabled()){
       manualAlerts[infoId] = {
         info_item_id: infoId,
         status: "active",
@@ -733,14 +760,24 @@
     const drafts = JSON.parse(localStorage.getItem(draftKey) || "[]");
     const filtered = drafts.filter(item => item.id !== state.currentDraftId);
     localStorage.setItem(draftKey, JSON.stringify(filtered));
-    alert("发布成功（样机：仅演示流程）");
+    alert("发布成功（已写入数据库）");
+    if(created?.id){
+      window.location.href = `info_detail.html?id=${encodeURIComponent(created.id)}`;
+    }
   });
 
   async function main(){
-    const [domains, indicatorDefs] = await Promise.all([
-      loadJson("./data/domains.json"),
+    const [domainTree, indicatorDefs] = await Promise.all([
+      loadApi("/domains/tree"),
       loadJson("./data/indicator_defs.json")
     ]);
+    const domains = [];
+    (function flatten(nodes){
+      (nodes || []).forEach(node => {
+        domains.push({ id: node.id, name: node.name, parent_id: node.parent_id ?? null });
+        flatten(node.children || []);
+      });
+    })(domainTree);
 
     state.domains = domains;
     state.indicatorDefs = (indicatorDefs || []).filter(x => x.is_active);

@@ -211,7 +211,7 @@
 
 ---
 
-## [ ] Block 5 - FastAPI 后端骨架
+## [x] Block 5 - FastAPI 后端骨架
 
 ### 目标
 创建最小可运行后端框架，为后续数据库接入做准备。
@@ -232,7 +232,7 @@
 
 ---
 
-## [ ] Block 6 - PostgreSQL 接入
+## [x] Block 6 - PostgreSQL 接入
 
 ### 目标
 实现真实数据库存储
