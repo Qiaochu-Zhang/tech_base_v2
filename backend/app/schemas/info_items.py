@@ -6,6 +6,16 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
+class AlertUpsertIn(BaseModel):
+    enabled: bool = False
+    alert_title: str | None = None
+    alert_body: str | None = None
+    reviewer_comment: str | None = None
+    alert_color: str | None = None
+    expires_at: datetime | None = None
+    dismiss_reason: str | None = None
+
+
 class InfoItemPublishIn(BaseModel):
     title: str = Field(min_length=1)
     content: str = Field(min_length=1)
@@ -19,6 +29,7 @@ class InfoItemPublishIn(BaseModel):
     tags: list[str] = Field(default_factory=list)
     domain_ids: list[str] = Field(min_length=1)
     classification: str | None = None
+    alert: AlertUpsertIn | None = None
 
 
 class InfoItemOut(BaseModel):
@@ -38,5 +49,14 @@ class InfoItemOut(BaseModel):
     tags: list[str]
     domain_ids: list[str]
     classification: str | None
+    alert_status: str | None
+    alert_source: str | None
+    alert_manual_override: bool
+    alert_title: str | None
+    alert_body: str | None
+    alert_reviewer_comment: str | None
+    alert_dismiss_reason: str | None
+    alert_color: str | None
+    alert_expires_at: datetime | None
 
     model_config = {"from_attributes": True}

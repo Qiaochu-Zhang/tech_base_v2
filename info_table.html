@@ -318,6 +318,8 @@
         <option value="orange" selected>橙色</option>
         <option value="red">红色</option>
       </select>
+      <label>预警到期时间</label>
+      <input id="alertExpiresAt" type="datetime-local" />
       <label>解除预警（填写原因）</label>
       <input id="dismissReason" type="text" placeholder="如需解除，填写原因">
       <div class="row" style="margin-top:12px;">
@@ -342,12 +344,32 @@
     return d.slice(0,10);
   }
 
-  async function loadApi(path){
-    const r = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
+  async function loadApi(path, options = {}){
+    const r = await fetch(`${API_BASE}${path}`, { cache: "no-store", ...options });
     if(!r.ok){
       throw new Error(`API请求失败: ${path} (${r.status})`);
     }
+    if(r.status === 204) return null;
     return await r.json();
+  }
+
+  function toLocalDateTimeInput(iso){
+    if(!iso) return "";
+    const d = new Date(iso);
+    if(Number.isNaN(d.getTime())) return "";
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${y}-${m}-${day}T${hh}:${mm}`;
+  }
+
+  function toIsoFromLocalDateTimeInput(value){
+    if(!value) return null;
+    const d = new Date(value);
+    if(Number.isNaN(d.getTime())) return null;
+    return d.toISOString();
   }
 
   function inDateRange(date, from, to){
@@ -475,8 +497,19 @@
       return arr.reverse().join(" / ");
     }
 
-    function hasActiveAlert(infoId){
-      return null;
+    function hasActiveAlert(info){
+      if(!info || info.alert_status !== "active") return null;
+      if(info.alert_expires_at){
+        const expires = new Date(info.alert_expires_at);
+        if(!Number.isNaN(expires.getTime()) && expires.getTime() < Date.now()){
+          return null;
+        }
+      }
+      return {
+        alert_title: info.alert_title,
+        alert_color: info.alert_color || "orange",
+        alert_expires_at: info.alert_expires_at
+      };
     }
 
     const uniqueSources = Array.from(new Set(infos.flatMap(i => i.source_types || [])));
@@ -557,19 +590,68 @@
 
     function openModal(info){
       currentInfoId = info.id;
-      alert("预警后端接口未接入，本页暂不支持保存预警。");
+      $("#modalTitle").textContent = info.title || info.id;
+      $("#alertTitle").value = info.alert_title || "";
+      $("#alertBody").value = info.alert_body || "";
+      $("#alertColor").value = info.alert_color || "orange";
+      $("#alertExpiresAt").value = toLocalDateTimeInput(info.alert_expires_at);
+      $("#dismissReason").value = "";
+      $("#alertModal").style.display = "flex";
     }
 
     $("#btnCloseModal").addEventListener("click", () => {
       $("#alertModal").style.display = "none";
     });
 
-    $("#btnSaveAlert").addEventListener("click", () => {
-      $("#alertModal").style.display = "none";
+    $("#btnSaveAlert").addEventListener("click", async () => {
+      if(!currentInfoId) return;
+      if(!$("#alertTitle").value.trim() || !$("#alertBody").value.trim()){
+        alert("请填写预警标题和预警内容");
+        return;
+      }
+      try{
+        const updated = await loadApi(`/info-items/${encodeURIComponent(currentInfoId)}/alert`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            enabled: true,
+            alert_title: $("#alertTitle").value.trim(),
+            alert_body: $("#alertBody").value.trim(),
+            reviewer_comment: "情报总表人工编辑",
+            alert_color: $("#alertColor").value,
+            expires_at: toIsoFromLocalDateTimeInput($("#alertExpiresAt").value)
+          })
+        });
+        infos = infos.map(item => item.id === updated.id ? updated : item);
+        $("#alertModal").style.display = "none";
+        render();
+      }catch(err){
+        alert(err?.message || "保存预警失败");
+      }
     });
 
-    $("#btnDismissAlert").addEventListener("click", () => {
-      $("#alertModal").style.display = "none";
+    $("#btnDismissAlert").addEventListener("click", async () => {
+      if(!currentInfoId) return;
+      const reason = $("#dismissReason").value.trim();
+      if(!reason){
+        alert("请填写解除原因");
+        return;
+      }
+      try{
+        const updated = await loadApi(`/info-items/${encodeURIComponent(currentInfoId)}/alert`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            enabled: false,
+            dismiss_reason: reason
+          })
+        });
+        infos = infos.map(item => item.id === updated.id ? updated : item);
+        $("#alertModal").style.display = "none";
+        render();
+      }catch(err){
+        alert(err?.message || "解除预警失败");
+      }
     });
 
     async function deleteInfo(info){
@@ -619,7 +701,7 @@
         const commentText = (info.comment || "").trim();
         if(commentFilter === "true" && !commentText) return false;
         if(commentFilter === "false" && commentText) return false;
-        const hasAlert = !!hasActiveAlert(info.id);
+        const hasAlert = !!hasActiveAlert(info);
         if(alertFilter === "true" && !hasAlert) return false;
         if(alertFilter === "false" && hasAlert) return false;
         if(keyword){
@@ -648,7 +730,7 @@
       rows.forEach(info => {
         const tr = document.createElement("tr");
         const domainNames = getDomainsForInfo(info).map(id => domainPath(id)).join("; ") || "-";
-        const alert = hasActiveAlert(info.id);
+        const alert = hasActiveAlert(info);
         const keywordVal = keyword;
 
         const snippetHtml = highlightSnippet(info.content || "", keywordVal, 140);
@@ -670,7 +752,7 @@
           <td>${fmt(info.published_at)}</td>
           <td>${domainNames}</td>
           <td><span class="badge">${info.importance_score}</span></td>
-          <td>${alert ? `<span class="badge ${alert.alert_color || "orange"}">${alert.alert_title || "预警"}</span>` : "-"}</td>
+          <td>${alert ? `<span class="badge ${alert.alert_color || "orange"}">${alert.alert_title || "预警"}${alert.alert_expires_at ? ` · 至 ${fmt(alert.alert_expires_at)}` : ""}</span>` : "-"}</td>
           <td>${(info.source_types || []).join("、") || "-"}</td>
           <td>
             <button class="btn" data-alert>${alert ? "编辑预警" : "新增预警"}</button>

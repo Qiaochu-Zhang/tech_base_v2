@@ -367,8 +367,6 @@ Open: info_detail.html?id=INFO_CCUS_0001
 
             <div style="margin-top:12px;" class="actions">
               <button class="btn" id="btnManualAlert">人工编辑预警</button>
-              <button class="btn" id="btnSimExtend">模拟：延期</button>
-              <button class="btn" id="btnSimDismiss">模拟：解除</button>
             </div>
           </div>
         </div>
@@ -389,9 +387,8 @@ Open: info_detail.html?id=INFO_CCUS_0001
             <div class="kv">
               <div class="k">数据文件</div>
               <div class="v muted small">
-                /data/domains.json<br/>
-                /data/info_items.json<br/>
-                /data/alerts.json<br/>
+                /api/domains/tree<br/>
+                /api/info-items/{id}<br/>
                 /data/indicator_defs.json<br/>
                 /data/indicator_values.json
               </div>
@@ -421,6 +418,8 @@ Open: info_detail.html?id=INFO_CCUS_0001
           <option value="orange" selected>橙色</option>
           <option value="red">红色</option>
         </select>
+        <label>预警到期时间</label>
+        <input id="manualAlertExpiresAt" type="datetime-local" />
         <label>解除预警（填写原因）</label>
         <input id="manualDismissReason" placeholder="如需解除，填写原因" />
         <div class="actions" style="margin-top:12px;">
@@ -438,7 +437,6 @@ Open: info_detail.html?id=INFO_CCUS_0001
     const escapeHtml = (s) => (s ?? "").replace(/[&<>"']/g, c => ({
       "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
     }[c]));
-    const manualKey = "manualAlerts";
 
     function getDomainIds(item){
       if(Array.isArray(item.domain_ids) && item.domain_ids.length){
@@ -504,10 +502,30 @@ Open: info_detail.html?id=INFO_CCUS_0001
       if(!r.ok) throw new Error(`加载失败：${path} (${r.status})`);
       return await r.json();
     }
-    async function loadApi(path){
-      const r = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
+    async function loadApi(path, options = {}){
+      const r = await fetch(`${API_BASE}${path}`, { cache: "no-store", ...options });
       if(!r.ok) throw new Error(`API加载失败：${path} (${r.status})`);
+      if(r.status === 204) return null;
       return await r.json();
+    }
+
+    function toLocalDateTimeInput(iso){
+      if(!iso) return "";
+      const d = new Date(iso);
+      if(Number.isNaN(d.getTime())) return "";
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      return `${y}-${m}-${day}T${hh}:${mm}`;
+    }
+
+    function toIsoFromLocalDateTimeInput(value){
+      if(!value) return null;
+      const d = new Date(value);
+      if(Number.isNaN(d.getTime())) return null;
+      return d.toISOString();
     }
 
     async function main(){
@@ -518,13 +536,11 @@ Open: info_detail.html?id=INFO_CCUS_0001
         const [
           domainTree,
           info,
-          alerts,
           indicatorDefs,
           indicatorValues
         ] = await Promise.all([
           loadApi("/domains/tree"),
           loadApi(`/info-items/${encodeURIComponent(id)}`),
-          loadJson("./data/alerts.json"),
           loadJson("./data/indicator_defs.json"),
           loadJson("./data/indicator_values.json")
         ]);
@@ -538,12 +554,14 @@ Open: info_detail.html?id=INFO_CCUS_0001
         })(domainTree);
 
         const domainMap = buildDomainMap(domains);
-        const manualAlerts = JSON.parse(localStorage.getItem(manualKey) || "{}");
-
-        // join alert (manual override -> active -> fallback)
-        const manualAlert = manualAlerts[id] && manualAlerts[id].status === "active" ? manualAlerts[id] : null;
-        const relatedAlerts = alerts.filter(a => a.info_item_id === id);
-        const alert = manualAlert || relatedAlerts.find(a => a.status === "active") || relatedAlerts[0] || null;
+        const alert = info.alert_status === "active" ? {
+          alert_title: info.alert_title,
+          alert_body: info.alert_body,
+          reviewer_comment: info.alert_reviewer_comment,
+          alert_color: info.alert_color,
+          status: info.alert_status,
+          expires_at: info.alert_expires_at
+        } : null;
 
         // join indicators
         const defMap = new Map(indicatorDefs.map(d => [d.id, d]));
@@ -681,6 +699,8 @@ Open: info_detail.html?id=INFO_CCUS_0001
         $("#btnCreateRevision").onclick = () => {
           const revisionPayload = {
             ...info,
+            manual_alert: info.alert_status === "active",
+            reviewer_comment: info.alert_reviewer_comment || "",
             id: "",
             status: "draft",
             revision_of: info.id,
@@ -690,19 +710,12 @@ Open: info_detail.html?id=INFO_CCUS_0001
           window.location.href = "upload_review.html?mode=revision";
         };
 
-        // simulate alert actions
-        $("#btnSimExtend")?.addEventListener("click", () => {
-          alert("样机：已模拟延期（真实系统会写 alerts + notifications + audit_logs）");
-        });
-        $("#btnSimDismiss")?.addEventListener("click", () => {
-          alert("样机：已模拟解除（真实系统会写 manual_dismiss_reason + audit_logs）");
-        });
-
         $("#btnManualAlert").addEventListener("click", () => {
           $("#manualAlertTitle").textContent = info.title ?? "-";
           $("#manualAlertTitleInput").value = alert?.alert_title || "";
           $("#manualAlertBodyInput").value = alert?.alert_body || "";
           $("#manualAlertColor").value = alert?.alert_color || "orange";
+          $("#manualAlertExpiresAt").value = toLocalDateTimeInput(alert?.expires_at);
           $("#manualDismissReason").value = "";
           $("#manualAlertModal").style.display = "flex";
         });
@@ -711,39 +724,47 @@ Open: info_detail.html?id=INFO_CCUS_0001
           $("#manualAlertModal").style.display = "none";
         });
 
-        $("#btnSaveManual").addEventListener("click", () => {
-          const manualAlerts = JSON.parse(localStorage.getItem(manualKey) || "{}");
-          manualAlerts[id] = {
-            info_item_id: id,
-            alert_title: $("#manualAlertTitleInput").value.trim() || "人工预警",
-            alert_body: $("#manualAlertBodyInput").value.trim() || "人工补充说明",
-            alert_color: $("#manualAlertColor").value,
-            status: "active",
-            source: "manual",
-            manual_override: true
-          };
-          localStorage.setItem(manualKey, JSON.stringify(manualAlerts));
-          $("#manualAlertModal").style.display = "none";
-          window.location.reload();
+        $("#btnSaveManual").addEventListener("click", async () => {
+          try{
+            await loadApi(`/info-items/${encodeURIComponent(id)}/alert`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                enabled: true,
+                alert_title: $("#manualAlertTitleInput").value.trim() || "人工预警",
+                alert_body: $("#manualAlertBodyInput").value.trim() || "人工补充说明",
+                reviewer_comment: "详情页人工编辑",
+                alert_color: $("#manualAlertColor").value,
+                expires_at: toIsoFromLocalDateTimeInput($("#manualAlertExpiresAt").value)
+              })
+            });
+            $("#manualAlertModal").style.display = "none";
+            window.location.reload();
+          }catch(e){
+            alert(e?.message || "保存失败");
+          }
         });
 
-        $("#btnDismissManual").addEventListener("click", () => {
+        $("#btnDismissManual").addEventListener("click", async () => {
           const reason = $("#manualDismissReason").value.trim();
           if(!reason){
             alert("请填写解除原因");
             return;
           }
-          const manualAlerts = JSON.parse(localStorage.getItem(manualKey) || "{}");
-          manualAlerts[id] = {
-            info_item_id: id,
-            status: "dismissed",
-            dismiss_reason: reason,
-            source: "manual",
-            manual_override: true
-          };
-          localStorage.setItem(manualKey, JSON.stringify(manualAlerts));
-          $("#manualAlertModal").style.display = "none";
-          window.location.reload();
+          try{
+            await loadApi(`/info-items/${encodeURIComponent(id)}/alert`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                enabled: false,
+                dismiss_reason: reason
+              })
+            });
+            $("#manualAlertModal").style.display = "none";
+            window.location.reload();
+          }catch(e){
+            alert(e?.message || "解除失败");
+          }
         });
 
       }catch(err){

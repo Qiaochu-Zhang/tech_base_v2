@@ -34,6 +34,15 @@ class InfoItem(Base):
     info_types: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     tags: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     classification: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    alert_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    alert_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    alert_manual_override: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    alert_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    alert_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    alert_reviewer_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    alert_dismiss_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    alert_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    alert_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     domains: Mapped[list["InfoItemDomain"]] = relationship(
         "InfoItemDomain", back_populates="info_item", cascade="all, delete-orphan"

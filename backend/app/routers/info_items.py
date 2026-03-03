@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.db.session import get_db
 from app.models.domain import Domain
 from app.models.info_item import InfoItem, InfoItemDomain
-from app.schemas import InfoItemOut, InfoItemPublishIn
+from app.schemas import AlertUpsertIn, InfoItemOut, InfoItemPublishIn
 
 router = APIRouter(tags=["info-items"])
 
@@ -32,7 +32,47 @@ def _to_info_item_out(item: InfoItem) -> InfoItemOut:
         tags=item.tags or [],
         domain_ids=[rel.domain_id for rel in item.domains],
         classification=item.classification,
+        alert_status=item.alert_status,
+        alert_source=item.alert_source,
+        alert_manual_override=item.alert_manual_override,
+        alert_title=item.alert_title,
+        alert_body=item.alert_body,
+        alert_reviewer_comment=item.alert_reviewer_comment,
+        alert_dismiss_reason=item.alert_dismiss_reason,
+        alert_color=item.alert_color,
+        alert_expires_at=item.alert_expires_at,
     )
+
+
+def _apply_alert_payload(item: InfoItem, alert: AlertUpsertIn | None) -> None:
+    if not alert or not alert.enabled:
+        item.alert_status = "dismissed" if alert else None
+        item.alert_source = "manual" if alert else None
+        item.alert_manual_override = bool(alert)
+        item.alert_title = None
+        item.alert_body = None
+        item.alert_reviewer_comment = None
+        item.alert_color = None
+        item.alert_expires_at = None
+        item.alert_dismiss_reason = alert.dismiss_reason if alert else None
+        return
+
+    if not alert.alert_title:
+        raise HTTPException(status_code=400, detail="alert_title is required when alert is enabled")
+    if not alert.alert_body:
+        raise HTTPException(status_code=400, detail="alert_body is required when alert is enabled")
+    if not alert.reviewer_comment:
+        raise HTTPException(status_code=400, detail="reviewer_comment is required when alert is enabled")
+
+    item.alert_status = "active"
+    item.alert_source = "manual"
+    item.alert_manual_override = True
+    item.alert_title = alert.alert_title
+    item.alert_body = alert.alert_body
+    item.alert_reviewer_comment = alert.reviewer_comment
+    item.alert_color = alert.alert_color or "orange"
+    item.alert_expires_at = alert.expires_at
+    item.alert_dismiss_reason = None
 
 
 @router.get("/info-items", response_model=list[InfoItemOut])
@@ -103,6 +143,7 @@ def publish_info_item(payload: InfoItemPublishIn, db: Session = Depends(get_db))
         tags=payload.tags,
         classification=payload.classification,
     )
+    _apply_alert_payload(item, payload.alert)
     db.add(item)
     db.flush()
 
@@ -118,4 +159,25 @@ def publish_info_item(payload: InfoItemPublishIn, db: Session = Depends(get_db))
     db.commit()
     db.refresh(item)
 
+    return _to_info_item_out(item)
+
+
+@router.patch("/info-items/{item_id}/alert", response_model=InfoItemOut)
+def upsert_info_item_alert(
+    item_id: UUID,
+    payload: AlertUpsertIn,
+    db: Session = Depends(get_db),
+) -> InfoItemOut:
+    stmt: Select[tuple[InfoItem]] = (
+        select(InfoItem)
+        .options(selectinload(InfoItem.domains))
+        .where(InfoItem.id == item_id)
+    )
+    item = db.scalars(stmt).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="info item not found")
+
+    _apply_alert_payload(item, payload)
+    db.commit()
+    db.refresh(item)
     return _to_info_item_out(item)

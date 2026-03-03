@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,7 +8,20 @@ from app.db.session import SessionLocal
 from app.routers import domains, health, info_items
 from app.services.bootstrap import seed_domains_if_empty
 
-app = FastAPI(title="Tech Intel API", version="0.2.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    try:
+        db = SessionLocal()
+        try:
+            seed_domains_if_empty(db)
+        finally:
+            db.close()
+    except Exception as exc:  # pragma: no cover
+        logger.warning("database bootstrap skipped: %s", exc)
+    yield
+
+app = FastAPI(title="Tech Intel API", version="0.2.0", lifespan=lifespan)
 logger = logging.getLogger(__name__)
 
 app.add_middleware(
@@ -21,15 +35,3 @@ app.add_middleware(
 app.include_router(health.router, prefix="/api")
 app.include_router(domains.router, prefix="/api")
 app.include_router(info_items.router, prefix="/api")
-
-
-@app.on_event("startup")
-def on_startup() -> None:
-    try:
-        db = SessionLocal()
-        try:
-            seed_domains_if_empty(db)
-        finally:
-            db.close()
-    except Exception as exc:  # pragma: no cover
-        logger.warning("database bootstrap skipped: %s", exc)

@@ -318,7 +318,6 @@
   const $ = s => document.querySelector(s);
   const API_BASE = window.API_BASE || "http://127.0.0.1:8000/api";
   const draftKey = "drafts";
-  const manualStorageKey = "manualAlerts";
 
   const escapeHtml = str => str.replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
 
@@ -601,6 +600,42 @@
     return "";
   }
 
+  function getAlertForm(){
+    return {
+      manual_alert: isAlertEnabled(),
+      alert_title: $("#alert_title").value.trim(),
+      alert_body: $("#alert_body").value.trim(),
+      reviewer_comment: $("#reviewer_comment").value.trim(),
+      alert_color: $("#alert_color").value,
+      duration: $("#duration").value
+    };
+  }
+
+  function durationToExpiresAt(duration){
+    const now = new Date();
+    if(duration === "week"){
+      now.setDate(now.getDate() + 7);
+    }else if(duration === "month"){
+      now.setMonth(now.getMonth() + 1);
+    }else if(duration === "quarter"){
+      now.setMonth(now.getMonth() + 3);
+    }else{
+      return null;
+    }
+    return now.toISOString();
+  }
+
+  function inferDurationByExpiresAt(expiresAt){
+    if(!expiresAt) return "month";
+    const expires = new Date(expiresAt).getTime();
+    const now = Date.now();
+    if(!Number.isFinite(expires) || expires <= now) return "month";
+    const diffDays = (expires - now) / (1000 * 60 * 60 * 24);
+    if(diffDays <= 9) return "week";
+    if(diffDays <= 45) return "month";
+    return "quarter";
+  }
+
   function validateAction(form, action){
     if(action === "publish"){
       return validatePublishRequired(form) || validateAlert();
@@ -616,6 +651,7 @@
 
   function upsertDraft(status){
     const form = getForm();
+    const alert = getAlertForm();
     const now = new Date().toISOString();
     const list = JSON.parse(localStorage.getItem(draftKey) || "[]");
     let id = state.currentDraftId;
@@ -625,7 +661,15 @@
     }
     const idx = list.findIndex(item => item.id === id);
     const createdAt = idx >= 0 ? list[idx].created_at : now;
-    const payload = { id, ...form, created_at: createdAt, updated_at: now, status };
+    const payload = {
+      id,
+      ...form,
+      ...alert,
+      indicators: state.indicators,
+      created_at: createdAt,
+      updated_at: now,
+      status
+    };
     if(idx >= 0){
       list[idx] = payload;
     } else {
@@ -729,7 +773,15 @@
           info_types: form.info_types,
           tags: form.tags,
           domain_ids: form.domain_ids,
-          classification: form.classification || null
+          classification: form.classification || null,
+          alert: isAlertEnabled() ? {
+            enabled: true,
+            alert_title: $("#alert_title").value.trim(),
+            alert_body: $("#alert_body").value.trim(),
+            reviewer_comment: $("#reviewer_comment").value.trim(),
+            alert_color: $("#alert_color").value,
+            expires_at: durationToExpiresAt($("#duration").value)
+          } : null
         })
       });
     }catch(err){
@@ -737,26 +789,6 @@
       return;
     }
 
-    const now = new Date().toISOString();
-    const infoId = created?.id;
-    const manualAlerts = JSON.parse(localStorage.getItem(manualStorageKey) || "{}");
-    if(infoId && isAlertEnabled()){
-      manualAlerts[infoId] = {
-        info_item_id: infoId,
-        status: "active",
-        source: "manual",
-        manual_override: true,
-        alert_title: $("#alert_title").value.trim(),
-        alert_body: $("#alert_body").value.trim(),
-        reviewer_comment: $("#reviewer_comment").value.trim(),
-        alert_color: $("#alert_color").value,
-        created_at: now
-      };
-      localStorage.setItem(manualStorageKey, JSON.stringify(manualAlerts));
-    }else if(manualAlerts[infoId]){
-      delete manualAlerts[infoId];
-      localStorage.setItem(manualStorageKey, JSON.stringify(manualAlerts));
-    }
     const drafts = JSON.parse(localStorage.getItem(draftKey) || "[]");
     const filtered = drafts.filter(item => item.id !== state.currentDraftId);
     localStorage.setItem(draftKey, JSON.stringify(filtered));
@@ -815,6 +847,25 @@
       document.querySelectorAll("#domainTree input[type='checkbox']").forEach(cb => {
         if((draft.domain_ids || []).includes(cb.value)) cb.checked = true;
       });
+      state.manualAlert = !!(draft.manual_alert || draft.alert_status === "active");
+      $("#alert_title").value = draft.alert_title || "";
+      $("#alert_body").value = draft.alert_body || "";
+      $("#reviewer_comment").value = draft.reviewer_comment || draft.alert_reviewer_comment || "";
+      $("#alert_color").value = draft.alert_color || "orange";
+      $("#duration").value = draft.duration || inferDurationByExpiresAt(draft.alert_expires_at);
+      if(Array.isArray(draft.indicators)){
+        state.indicators = draft.indicators.map(ind => ({
+          name: ind.name || "新指标",
+          value: ind.value || "",
+          unit: ind.unit || "",
+          keep: ind.keep !== false
+        }));
+      }
+      if(state.indicators.length || state.manualAlert){
+        $("#aiPanel").style.display = "block";
+        renderIndicators();
+      }
+      updateAlertDisplay();
     }
   }
 

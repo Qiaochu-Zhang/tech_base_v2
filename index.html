@@ -370,7 +370,7 @@
 
 <script type="module">
   const $ = s => document.querySelector(s);
-  const publishedKey = "published_items";
+  const API_BASE = window.API_BASE || "http://127.0.0.1:8000/api";
   const rootKey = "root_domain_id";
 
   // ---------------- URL helpers ----------------
@@ -447,13 +447,10 @@
     if(!r.ok) throw new Error(`加载失败：${path} (${r.status})`);
     return r.json();
   }
-  function loadLocalPublished(){
-    try{
-      const list = JSON.parse(localStorage.getItem(publishedKey) || "[]");
-      return Array.isArray(list) ? list.filter(i => i && i.status === "published") : [];
-    }catch{
-      return [];
-    }
+  async function loadApi(path){
+    const r = await fetch(`${API_BASE}${path}`, { cache:"no-store" });
+    if(!r.ok) throw new Error(`API加载失败：${path} (${r.status})`);
+    return r.json();
   }
 
   // ---------------- domain helpers ----------------
@@ -667,25 +664,29 @@
   // ---------------- main ----------------
   async function main(){
     try{
-      const [domains, infoItemsRawSource, alertsRaw, indicatorValues] = await Promise.all([
-        loadJson("./data/domains.json"),
-        loadJson("./data/info_items.json"),
-        loadJson("./data/alerts.json"),
+      const [domainTree, infoItemsRaw, indicatorValues] = await Promise.all([
+        loadApi("/domains/tree"),
+        loadApi("/info-items?status=published"),
         loadJson("./data/indicator_values.json")
       ]);
 
-      let infoItemsRaw = infoItemsRawSource;
-      const localPublished = loadLocalPublished();
-      if(localPublished.length){
-        const map = new Map();
-        infoItemsRaw.forEach(item => {
-          if(item && item.id) map.set(item.id, item);
+      const domains = [];
+      (function flatten(nodes){
+        (nodes || []).forEach(node => {
+          domains.push({ id: node.id, name: node.name, parent_id: node.parent_id ?? null, level: node.level, sort_order: node.sort_order, is_active: node.is_active });
+          flatten(node.children || []);
         });
-        localPublished.forEach(item => {
-          if(item && item.id) map.set(item.id, item);
-        });
-        infoItemsRaw = Array.from(map.values());
-      }
+      })(domainTree);
+
+      const alertsRaw = (infoItemsRaw || [])
+        .filter(item => item && item.alert_status === "active")
+        .map(item => ({
+          info_item_id: item.id,
+          status: item.alert_status,
+          alert_color: item.alert_color,
+          alert_title: item.alert_title,
+          expires_at: item.alert_expires_at
+        }));
 
       const domainMap = buildDomainMap(domains);
 
