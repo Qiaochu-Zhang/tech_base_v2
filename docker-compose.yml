@@ -1,7 +1,30 @@
 services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: tech_intel
+      POSTGRES_USER: tech
+      POSTGRES_PASSWORD: tech
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tech -d tech_intel"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   api:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg2://tech:tech@db:5432/tech_intel
+      DATA_DIR: /app/data
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "8000:8000"
+
+volumes:
+  pg_data:

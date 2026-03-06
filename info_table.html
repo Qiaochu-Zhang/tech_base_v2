@@ -318,6 +318,8 @@
         <option value="orange" selected>橙色</option>
         <option value="red">红色</option>
       </select>
+      <label>预警到期时间</label>
+      <input id="alertExpiresAt" type="datetime-local" />
       <label>解除预警（填写原因）</label>
       <input id="dismissReason" type="text" placeholder="如需解除，填写原因">
       <div class="row" style="margin-top:12px;">
@@ -331,21 +333,7 @@
 <script type="module">
   const $ = s => document.querySelector(s);
   const escapeHtml = str => str.replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
-
-  const manualStorageKey = "manualAlerts";
-  const publishedKey = "published_items";
-  const deletedKey = "deleted_info_ids";
-  const loadManualAlerts = () => JSON.parse(localStorage.getItem(manualStorageKey) || "{}");
-  const saveManualAlerts = data => localStorage.setItem(manualStorageKey, JSON.stringify(data));
-  const loadDeletedIds = () => {
-    try{
-      const list = JSON.parse(localStorage.getItem(deletedKey) || "[]");
-      return new Set(Array.isArray(list) ? list : []);
-    }catch{
-      return new Set();
-    }
-  };
-  const saveDeletedIds = set => localStorage.setItem(deletedKey, JSON.stringify(Array.from(set)));
+  const API_BASE = window.API_BASE || "http://127.0.0.1:8000/api";
 
   function qp(name){
     return new URLSearchParams(location.search).get(name);
@@ -356,33 +344,32 @@
     return d.slice(0,10);
   }
 
-  async function loadJson(p){
-    const r = await fetch(p, { cache: "no-store" });
+  async function loadApi(path, options = {}){
+    const r = await fetch(`${API_BASE}${path}`, { cache: "no-store", ...options });
+    if(!r.ok){
+      throw new Error(`API请求失败: ${path} (${r.status})`);
+    }
+    if(r.status === 204) return null;
     return await r.json();
   }
 
-  function loadLocalPublished(){
-    try{
-      const list = JSON.parse(localStorage.getItem(publishedKey) || "[]");
-      return Array.isArray(list) ? list.filter(i => i && i.status === "published") : [];
-    } catch {
-      return [];
-    }
+  function toLocalDateTimeInput(iso){
+    if(!iso) return "";
+    const d = new Date(iso);
+    if(Number.isNaN(d.getTime())) return "";
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${y}-${m}-${day}T${hh}:${mm}`;
   }
 
-  function mergeInfoItems(baseItems, localItems){
-    const map = new Map();
-    (baseItems || []).forEach(item => {
-      if(item && item.id) map.set(item.id, item);
-    });
-    (localItems || []).forEach(item => {
-      if(item && item.id) map.set(item.id, item);
-    });
-    return Array.from(map.values());
-  }
-
-  function getPublishedItems(items){
-    return (items || []).filter(item => item && item.status === "published");
+  function toIsoFromLocalDateTimeInput(value){
+    if(!value) return null;
+    const d = new Date(value);
+    if(Number.isNaN(d.getTime())) return null;
+    return d.toISOString();
   }
 
   function inDateRange(date, from, to){
@@ -463,14 +450,17 @@
   }
 
   async function main(){
-    let [infos, alerts, domains] = await Promise.all([
-      loadJson("./data/info_items.json"),
-      loadJson("./data/alerts.json"),
-      loadJson("./data/domains.json")
+    let [infos, domainTree] = await Promise.all([
+      loadApi("/info-items?status=published"),
+      loadApi("/domains/tree")
     ]);
-
-    const localPublished = loadLocalPublished();
-    infos = getPublishedItems(mergeInfoItems(infos, localPublished));
+    const domains = [];
+    (function flatten(nodes){
+      (nodes || []).forEach(node => {
+        domains.push({ id: node.id, name: node.name, parent_id: node.parent_id ?? null });
+        flatten(node.children || []);
+      });
+    })(domainTree);
 
     const domainMap = Object.fromEntries(domains.map(d=>[d.id,d]));
 
@@ -497,10 +487,6 @@
       return out;
     }
 
-
-    
-    const manualAlerts = loadManualAlerts();
-
     function domainPath(id){
       const arr=[];
       let cur=domainMap[id];
@@ -511,10 +497,19 @@
       return arr.reverse().join(" / ");
     }
 
-    function hasActiveAlert(infoId){
-      const manual = manualAlerts[infoId];
-      if(manual && manual.status === "active") return manual;
-      return alerts.find(a => a.info_item_id === infoId && a.status === "active") || null;
+    function hasActiveAlert(info){
+      if(!info || info.alert_status !== "active") return null;
+      if(info.alert_expires_at){
+        const expires = new Date(info.alert_expires_at);
+        if(!Number.isNaN(expires.getTime()) && expires.getTime() < Date.now()){
+          return null;
+        }
+      }
+      return {
+        alert_title: info.alert_title,
+        alert_color: info.alert_color || "orange",
+        alert_expires_at: info.alert_expires_at
+      };
     }
 
     const uniqueSources = Array.from(new Set(infos.flatMap(i => i.source_types || [])));
@@ -595,11 +590,11 @@
 
     function openModal(info){
       currentInfoId = info.id;
-      const existing = manualAlerts[info.id] || {};
-      $("#modalTitle").textContent = info.title;
-      $("#alertTitle").value = existing.alert_title || "";
-      $("#alertBody").value = existing.alert_body || "";
-      $("#alertColor").value = existing.alert_color || "orange";
+      $("#modalTitle").textContent = info.title || info.id;
+      $("#alertTitle").value = info.alert_title || "";
+      $("#alertBody").value = info.alert_body || "";
+      $("#alertColor").value = info.alert_color || "orange";
+      $("#alertExpiresAt").value = toLocalDateTimeInput(info.alert_expires_at);
       $("#dismissReason").value = "";
       $("#alertModal").style.display = "flex";
     }
@@ -608,62 +603,73 @@
       $("#alertModal").style.display = "none";
     });
 
-    $("#btnSaveAlert").addEventListener("click", () => {
+    $("#btnSaveAlert").addEventListener("click", async () => {
       if(!currentInfoId) return;
-      manualAlerts[currentInfoId] = {
-        info_item_id: currentInfoId,
-        alert_title: $("#alertTitle").value.trim() || "人工预警",
-        alert_body: $("#alertBody").value.trim() || "人工补充说明",
-        alert_color: $("#alertColor").value,
-        status: "active",
-        source: "manual",
-        manual_override: true
-      };
-      saveManualAlerts(manualAlerts);
-      $("#alertModal").style.display = "none";
-      render();
+      if(!$("#alertTitle").value.trim() || !$("#alertBody").value.trim()){
+        alert("请填写预警标题和预警内容");
+        return;
+      }
+      try{
+        const updated = await loadApi(`/info-items/${encodeURIComponent(currentInfoId)}/alert`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            enabled: true,
+            alert_title: $("#alertTitle").value.trim(),
+            alert_body: $("#alertBody").value.trim(),
+            reviewer_comment: "情报总表人工编辑",
+            alert_color: $("#alertColor").value,
+            expires_at: toIsoFromLocalDateTimeInput($("#alertExpiresAt").value)
+          })
+        });
+        infos = infos.map(item => item.id === updated.id ? updated : item);
+        $("#alertModal").style.display = "none";
+        render();
+      }catch(err){
+        alert(err?.message || "保存预警失败");
+      }
     });
 
-    $("#btnDismissAlert").addEventListener("click", () => {
+    $("#btnDismissAlert").addEventListener("click", async () => {
       if(!currentInfoId) return;
       const reason = $("#dismissReason").value.trim();
       if(!reason){
         alert("请填写解除原因");
         return;
       }
-      manualAlerts[currentInfoId] = {
-        info_item_id: currentInfoId,
-        status: "dismissed",
-        dismiss_reason: reason,
-        source: "manual",
-        manual_override: true
-      };
-      saveManualAlerts(manualAlerts);
-      $("#alertModal").style.display = "none";
-      render();
+      try{
+        const updated = await loadApi(`/info-items/${encodeURIComponent(currentInfoId)}/alert`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            enabled: false,
+            dismiss_reason: reason
+          })
+        });
+        infos = infos.map(item => item.id === updated.id ? updated : item);
+        $("#alertModal").style.display = "none";
+        render();
+      }catch(err){
+        alert(err?.message || "解除预警失败");
+      }
     });
 
-    function deleteInfo(info){
+    async function deleteInfo(info){
       if(!confirm(`确认删除情报「${info.title || info.id}」？`)) return;
-
-      const published = loadLocalPublished().filter(item => item.id !== info.id);
-      localStorage.setItem(publishedKey, JSON.stringify(published));
-
-      const deletedIds = loadDeletedIds();
-      deletedIds.add(info.id);
-      saveDeletedIds(deletedIds);
-
-      const manualAlerts = loadManualAlerts();
-      if(manualAlerts[info.id]){
-        delete manualAlerts[info.id];
-        saveManualAlerts(manualAlerts);
+      try{
+        const r = await fetch(`${API_BASE}/info-items/${encodeURIComponent(info.id)}`, { method: "DELETE" });
+        if(!r.ok && r.status !== 204){
+          throw new Error(`删除失败 (${r.status})`);
+        }
+        infos = infos.filter(item => item.id !== info.id);
+        render();
+      }catch(err){
+        alert(err?.message || "删除失败");
       }
-      render();
     }
 
     function render(){
-      const deletedIds = loadDeletedIds();
-      const infosLive = getPublishedItems(mergeInfoItems(infos, loadLocalPublished())).filter(item => !deletedIds.has(item.id));
+      const infosLive = (infos || []).filter(item => item && item.status === "published");
       const from = $("#fromDate").value;
       const to = $("#toDate").value;
       const domainId = $("#domainFilter").value;
@@ -695,7 +701,7 @@
         const commentText = (info.comment || "").trim();
         if(commentFilter === "true" && !commentText) return false;
         if(commentFilter === "false" && commentText) return false;
-        const hasAlert = !!hasActiveAlert(info.id);
+        const hasAlert = !!hasActiveAlert(info);
         if(alertFilter === "true" && !hasAlert) return false;
         if(alertFilter === "false" && hasAlert) return false;
         if(keyword){
@@ -724,7 +730,7 @@
       rows.forEach(info => {
         const tr = document.createElement("tr");
         const domainNames = getDomainsForInfo(info).map(id => domainPath(id)).join("; ") || "-";
-        const alert = hasActiveAlert(info.id);
+        const alert = hasActiveAlert(info);
         const keywordVal = keyword;
 
         const snippetHtml = highlightSnippet(info.content || "", keywordVal, 140);
@@ -746,7 +752,7 @@
           <td>${fmt(info.published_at)}</td>
           <td>${domainNames}</td>
           <td><span class="badge">${info.importance_score}</span></td>
-          <td>${alert ? `<span class="badge ${alert.alert_color || "orange"}">${alert.alert_title || "预警"}</span>` : "-"}</td>
+          <td>${alert ? `<span class="badge ${alert.alert_color || "orange"}">${alert.alert_title || "预警"}${alert.alert_expires_at ? ` · 至 ${fmt(alert.alert_expires_at)}` : ""}</span>` : "-"}</td>
           <td>${(info.source_types || []).join("、") || "-"}</td>
           <td>
             <button class="btn" data-alert>${alert ? "编辑预警" : "新增预警"}</button>
