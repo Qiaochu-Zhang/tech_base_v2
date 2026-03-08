@@ -1,3 +1,3 @@
-from app.schemas.info_items import AlertUpsertIn, InfoItemOut, InfoItemPublishIn
+from app.schemas.info_items import AlertUpsertIn, InfoItemDraftIn, InfoItemOut, InfoItemPublishIn
 
-__all__ = ["InfoItemOut", "InfoItemPublishIn", "AlertUpsertIn"]
+__all__ = ["InfoItemOut", "InfoItemPublishIn", "InfoItemDraftIn", "AlertUpsertIn"]

@@ -97,11 +97,12 @@
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <a class="btn" href="data/draft_template.csv" download>下载草稿模板</a>
         <a class="btn" href="data/upload_template.csv" download>下载批量上传模板</a>
+        <a class="btn" href="data/draft_upload_guide.csv" download>下载CSV说明模板</a>
       </div>
     </div>
     <div class="bd">
-      <input type="file" id="fileInput" accept=".csv" />
-      <div class="muted small" style="margin-top:8px;">样机支持 CSV（可用 Excel 打开/保存）。</div>
+      <input type="file" id="fileInput" accept=".csv,.xlsx" />
+      <div class="muted small" style="margin-top:8px;">支持 CSV 和 Excel `.xlsx`。</div>
 
       <div id="status" style="margin-top:10px;"></div>
 
@@ -130,9 +131,9 @@
   </section>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
   const $ = s => document.querySelector(s);
-  const draftKey = "drafts";
   const API_BASE = window.API_BASE || "http://127.0.0.1:8000/api";
 
   async function loadApi(path, options = {}){
@@ -171,8 +172,10 @@
         cell = "";
         continue;
       }
-      if((ch === "\n" || ch === "\r") && !inQuotes){
-        if(ch === "\r" && next === "\n") i++;
+      if((ch === "
+" || ch === "") && !inQuotes){
+        if(ch === "" && next === "
+") i++;
         row.push(cell);
         rows.push(row);
         row = [];
@@ -212,6 +215,23 @@
       }
     }
     return text;
+  }
+
+  async function readXlsxRows(file){
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const sheetName = wb.SheetNames[0];
+    if(!sheetName){
+      return [];
+    }
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: "" });
+    return rows.map(row => {
+      const normalized = {};
+      Object.keys(row).forEach(key => {
+        normalized[String(key).trim()] = String(row[key] ?? "").trim();
+      });
+      return normalized;
+    });
   }
 
   function normalizeClassification(v){
@@ -280,7 +300,6 @@
 
   function toDraft(row){
     return {
-      id: `DRAFT_${Date.now()}_${Math.random().toString(16).slice(2,6)}`,
       title: row.title,
       published_at: row.published_at,
       source_url: row.source_url,
@@ -302,6 +321,42 @@
       indicators: extractIndicators(row),
       status: "draft"
     };
+  }
+
+  async function createDraftRow(row){
+    const draft = toDraft(row);
+    await loadApi("/info-items/draft", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: draft.title,
+        content: draft.content,
+        source_url: draft.source_url || null,
+        published_at: draft.published_at ? `${draft.published_at}T00:00:00Z` : null,
+        importance_score: draft.importance_score,
+        is_new_tech: draft.is_new_tech,
+        comment: draft.comment || null,
+        source_types: draft.source_types,
+        info_types: draft.info_types,
+        tags: draft.tags,
+        domain_ids: draft.domain_ids,
+        classification: draft.classification || null,
+        status: "draft",
+        draft_data: {
+          indicators: draft.indicators || [],
+          duration: draft.duration || "month",
+          manual_alert: !!draft.alert_manual
+        },
+        alert: draft.alert_manual ? {
+          enabled: true,
+          alert_title: draft.alert_title || "",
+          alert_body: draft.alert_body || "",
+          reviewer_comment: draft.reviewer_comment || "",
+          alert_color: draft.alert_color || "orange",
+          expires_at: durationToExpiresAt(draft.duration || "month")
+        } : null
+      })
+    });
   }
 
   async function publishRow(row){
@@ -339,8 +394,13 @@
     const file = e.target.files[0];
     if(!file) return;
     try{
-      const text = await readCsvText(file);
-      previewRows = parseCSV(text);
+      const ext = (file.name.split(".").pop() || "").toLowerCase();
+      if(ext === "xlsx"){
+        previewRows = await readXlsxRows(file);
+      }else{
+        const text = await readCsvText(file);
+        previewRows = parseCSV(text);
+      }
       renderPreview();
     }catch(err){
       $("#status").textContent = `读取文件失败：${err.message || err}`;
@@ -376,9 +436,9 @@
     $("#status").className = errorCount ? "error" : "success";
   }
 
-  $("#btnCommitDraft").addEventListener("click", () => {
+  $("#btnCommitDraft").addEventListener("click", async () => {
     if(previewRows.length === 0){
-      alert("请先上传 CSV 文件");
+      alert("请先上传 CSV/XLSX 文件");
       return;
     }
     const invalid = previewRows.find(row => validate(row, "draft"));
@@ -386,15 +446,26 @@
       alert("存在校验错误，无法提交。");
       return;
     }
-    const list = JSON.parse(localStorage.getItem(draftKey) || "[]");
-    previewRows.forEach(row => list.unshift(toDraft(row)));
-    localStorage.setItem(draftKey, JSON.stringify(list));
-    alert("已批量生成草稿");
+    let ok = 0;
+    let fail = 0;
+    for(const row of previewRows){
+      try{
+        await createDraftRow(row);
+        ok++;
+      }catch{
+        fail++;
+      }
+    }
+    if(fail){
+      alert(`批量生成草稿完成：成功 ${ok} 条，失败 ${fail} 条。`);
+    }else{
+      alert(`已批量生成草稿，共 ${ok} 条。`);
+    }
   });
 
   $("#btnCommitPublish").addEventListener("click", async () => {
     if(previewRows.length === 0){
-      alert("请先上传 CSV 文件");
+      alert("请先上传 CSV/XLSX 文件");
       return;
     }
     const invalid = previewRows.find(row => validate(row, "publish"));
@@ -419,5 +490,6 @@
     }
   });
 </script>
+
 </body>
 </html>

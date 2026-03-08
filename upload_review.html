@@ -213,7 +213,7 @@
         </select>
 
         <div class="row" style="margin-top:12px;">
-          <button class="btn" id="btnSaveDraft">保存草稿（本地）</button>
+          <button class="btn" id="btnSaveDraft">保存草稿</button>
           <button class="btn primary" id="btnSubmit">提交并生成 AI 建议</button>
         </div>
       </div>
@@ -317,7 +317,6 @@
 
   const $ = s => document.querySelector(s);
   const API_BASE = window.API_BASE || "http://127.0.0.1:8000/api";
-  const draftKey = "drafts";
 
   const escapeHtml = str => str.replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
 
@@ -649,34 +648,50 @@
     return "";
   }
 
-  function upsertDraft(status){
+  async function upsertDraft(status){
     const form = getForm();
     const alert = getAlertForm();
-    const now = new Date().toISOString();
-    const list = JSON.parse(localStorage.getItem(draftKey) || "[]");
-    let id = state.currentDraftId;
-    if(!id){
-      id = `DRAFT_${Date.now()}`;
-      state.currentDraftId = id;
-    }
-    const idx = list.findIndex(item => item.id === id);
-    const createdAt = idx >= 0 ? list[idx].created_at : now;
     const payload = {
-      id,
-      ...form,
-      ...alert,
-      indicators: state.indicators,
-      created_at: createdAt,
-      updated_at: now,
-      status
+      title: form.title,
+      content: form.content,
+      source_url: form.source_url || null,
+      published_at: form.published_at ? `${form.published_at}T00:00:00Z` : null,
+      importance_score: form.importance_score,
+      is_new_tech: form.is_new_tech,
+      comment: form.comment || null,
+      source_types: form.source_types,
+      info_types: form.info_types,
+      tags: form.tags,
+      domain_ids: form.domain_ids,
+      classification: form.classification || null,
+      status,
+      draft_data: {
+        indicators: state.indicators,
+        duration: alert.duration,
+        manual_alert: isAlertEnabled()
+      },
+      alert: isAlertEnabled() ? {
+        enabled: true,
+        alert_title: alert.alert_title,
+        alert_body: alert.alert_body,
+        reviewer_comment: alert.reviewer_comment,
+        alert_color: alert.alert_color,
+        expires_at: durationToExpiresAt(alert.duration)
+      } : null
     };
-    if(idx >= 0){
-      list[idx] = payload;
-    } else {
-      list.unshift(payload);
-    }
-    localStorage.setItem(draftKey, JSON.stringify(list));
-    return payload;
+    const saved = state.currentDraftId
+      ? await loadApi(`/info-items/${encodeURIComponent(state.currentDraftId)}/draft`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        })
+      : await loadApi("/info-items/draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+    state.currentDraftId = saved.id;
+    return saved;
   }
 
   function showPreview(){
@@ -701,7 +716,7 @@
     $("#previewModal").style.display = "none";
   });
 
-  $("#btnSaveDraft").addEventListener("click", () => {
+  $("#btnSaveDraft").addEventListener("click", async () => {
     clearWarn();
     const form = getForm();
     const error = validateAction(form, "save_draft");
@@ -709,11 +724,15 @@
       showWarn(error);
       return;
     }
-    upsertDraft("draft");
-    alert("草稿已保存到本地");
+    try{
+      await upsertDraft("draft");
+      alert("草稿已保存");
+    }catch(err){
+      showWarn(err?.message || "保存草稿失败");
+    }
   });
 
-  $("#btnSubmit").addEventListener("click", () => {
+  $("#btnSubmit").addEventListener("click", async () => {
     clearWarn();
     const form = getForm();
     const error = validateAction(form, "submit");
@@ -721,7 +740,12 @@
       showWarn(error);
       return;
     }
-    upsertDraft("ai_suggested");
+    try{
+      await upsertDraft("ai_suggested");
+    }catch(err){
+      showWarn(err?.message || "提交失败");
+      return;
+    }
     runAiSuggestion(form);
     $("#aiPanel").style.display = "block";
     window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
@@ -774,6 +798,7 @@
           tags: form.tags,
           domain_ids: form.domain_ids,
           classification: form.classification || null,
+          draft_id: state.currentDraftId || null,
           alert: isAlertEnabled() ? {
             enabled: true,
             alert_title: $("#alert_title").value.trim(),
@@ -789,14 +814,61 @@
       return;
     }
 
-    const drafts = JSON.parse(localStorage.getItem(draftKey) || "[]");
-    const filtered = drafts.filter(item => item.id !== state.currentDraftId);
-    localStorage.setItem(draftKey, JSON.stringify(filtered));
     alert("发布成功（已写入数据库）");
     if(created?.id){
       window.location.href = `info_detail.html?id=${encodeURIComponent(created.id)}`;
     }
   });
+
+  function hydrateDraft(draft){
+    state.revisionMode = !!draft.revision_mode;
+    state.currentDraftId = state.revisionMode ? null : (draft.id || null);
+    $("#title").value = draft.title || "";
+    $("#published_at").value = (draft.published_at || "").slice(0, 10) || $("#published_at").value;
+    $("#content").value = draft.content || "";
+    $("#source_url").value = draft.source_url || "";
+    $("#tags").value = (draft.tags || []).join(", ");
+    $("#comment").value = draft.comment || "";
+    $("#classification").value = draft.classification || "内部";
+    $("#is_new_tech").value = String(draft.is_new_tech ?? true);
+    $("#importance_score").value = String(draft.importance_score || 4);
+    document.querySelectorAll("#sourceChips .chip").forEach(ch => {
+      if((draft.source_types || []).includes(ch.dataset.value)) ch.classList.add("on");
+    });
+    document.querySelectorAll("#typeChips .chip").forEach(ch => {
+      if((draft.info_types || []).includes(ch.dataset.value)) ch.classList.add("on");
+    });
+    document.querySelectorAll("#domainTree input[type='checkbox']").forEach(cb => {
+      if((draft.domain_ids || []).includes(cb.value)) cb.checked = true;
+    });
+    const draftData = draft.draft_data || {};
+    state.manualAlert = !!(draftData.manual_alert || draft.manual_alert || draft.alert_status === "active");
+    $("#alert_title").value = draft.alert_title || "";
+    $("#alert_body").value = draft.alert_body || "";
+    $("#reviewer_comment").value = draft.reviewer_comment || draft.alert_reviewer_comment || "";
+    $("#alert_color").value = draft.alert_color || "orange";
+    $("#duration").value = draftData.duration || draft.duration || inferDurationByExpiresAt(draft.alert_expires_at);
+    if(Array.isArray(draftData.indicators)){
+      state.indicators = draftData.indicators.map(ind => ({
+        name: ind.name || "新指标",
+        value: ind.value || "",
+        unit: ind.unit || "",
+        keep: ind.keep !== false
+      }));
+    }else if(Array.isArray(draft.indicators)){
+      state.indicators = draft.indicators.map(ind => ({
+        name: ind.name || "新指标",
+        value: ind.value || "",
+        unit: ind.unit || "",
+        keep: ind.keep !== false
+      }));
+    }
+    if(state.indicators.length || state.manualAlert || draft.status === "ai_suggested"){
+      $("#aiPanel").style.display = "block";
+      renderIndicators();
+    }
+    updateAlertDisplay();
+  }
 
   async function main(){
     const [domainTree, indicatorDefs] = await Promise.all([
@@ -823,49 +895,19 @@
     const today = new Date();
     $("#published_at").value = today.toISOString().slice(0,10);
 
+    const qp = new URLSearchParams(location.search);
+    const draftId = qp.get("draft_id");
+    if(draftId){
+      const draft = await loadApi(`/info-items/${encodeURIComponent(draftId)}/draft`);
+      hydrateDraft(draft);
+      return;
+    }
+
     const draftPayload = localStorage.getItem("currentDraft");
     if(draftPayload){
       const draft = JSON.parse(draftPayload);
       localStorage.removeItem("currentDraft");
-      state.revisionMode = !!draft.revision_mode;
-      state.currentDraftId = state.revisionMode ? null : (draft.id || null);
-      $("#title").value = draft.title || "";
-      $("#published_at").value = draft.published_at || $("#published_at").value;
-      $("#content").value = draft.content || "";
-      $("#source_url").value = draft.source_url || "";
-      $("#tags").value = (draft.tags || []).join(", ");
-      $("#comment").value = draft.comment || "";
-      $("#classification").value = draft.classification || "内部";
-      $("#is_new_tech").value = String(draft.is_new_tech ?? true);
-      $("#importance_score").value = String(draft.importance_score || 4);
-      document.querySelectorAll("#sourceChips .chip").forEach(ch => {
-        if((draft.source_types || []).includes(ch.dataset.value)) ch.classList.add("on");
-      });
-      document.querySelectorAll("#typeChips .chip").forEach(ch => {
-        if((draft.info_types || []).includes(ch.dataset.value)) ch.classList.add("on");
-      });
-      document.querySelectorAll("#domainTree input[type='checkbox']").forEach(cb => {
-        if((draft.domain_ids || []).includes(cb.value)) cb.checked = true;
-      });
-      state.manualAlert = !!(draft.manual_alert || draft.alert_status === "active");
-      $("#alert_title").value = draft.alert_title || "";
-      $("#alert_body").value = draft.alert_body || "";
-      $("#reviewer_comment").value = draft.reviewer_comment || draft.alert_reviewer_comment || "";
-      $("#alert_color").value = draft.alert_color || "orange";
-      $("#duration").value = draft.duration || inferDurationByExpiresAt(draft.alert_expires_at);
-      if(Array.isArray(draft.indicators)){
-        state.indicators = draft.indicators.map(ind => ({
-          name: ind.name || "新指标",
-          value: ind.value || "",
-          unit: ind.unit || "",
-          keep: ind.keep !== false
-        }));
-      }
-      if(state.indicators.length || state.manualAlert){
-        $("#aiPanel").style.display = "block";
-        renderIndicators();
-      }
-      updateAlertDisplay();
+      hydrateDraft(draft);
     }
   }
 

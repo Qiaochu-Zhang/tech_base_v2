@@ -251,11 +251,45 @@
 
 ---
 
+## [x] Block 7 - 草稿/预警后端化与批量上传增强
+
+### 目标
+补齐草稿与预警后端能力，并增强批量上传与模板说明，避免前端回填丢失与字段理解偏差。
+
+### 要求
+- 草稿保存时必须保留并可回填“之前选择的技术区域（domains）”，不得丢失。
+- `alerts` 后端化：预警数据通过后端接口统一读写，不再依赖前端本地模拟状态。
+- `drafts` 后端化：草稿创建、更新、列表、详情改为后端存储与查询。
+- 批量上传支持 Excel `.xlsx` 文件（除现有 CSV 外）。
+- 在“草稿批量上传页”新增“下载 CSV 说明模板”按钮，模板需包含：
+  - 不同中文 domain 对应的英文填写字段说明；
+  - 当前不同领域已预设 indicator 列表及其对应单位说明。
+
+### 验收标准
+- 保存草稿后刷新页面或重新进入编辑页，已选技术区域完整回显。
+- 预警编辑与读取均通过后端接口完成，前端刷新后状态一致。
+- 草稿不依赖 localStorage，后端重启后数据仍在数据库。
+- 批量上传页可成功解析并导入 `.xlsx` 文件。
+- 草稿批量上传页可下载 CSV 说明文件，内容包含 domain 中英文字段映射与各领域预设 indicator/单位。
+
+### 本地验证结果（2026-03-08）
+- `docker compose up -d --build` 启动通过（api + db）。
+- `docker compose run --rm api pytest -q` 通过（`4 passed`）。
+- 接口联调通过：
+  - `GET /api/health` -> 200
+  - `POST /api/info-items/draft` -> 201
+  - `GET /api/info-items/drafts` -> 200
+  - `GET /api/info-items/{id}/draft` -> 200
+  - `POST /api/info-items/publish`（带 `draft_id`）-> 201
+  - `PATCH /api/info-items/{id}/alert` -> 200
+
+---
+
 # 执行顺序
 
 Block 必须按顺序执行：
 
-1 → 2 → 3 → Bugfix → 4 → 5 → 6
+1 → 2 → 3 → Bugfix → 4 → 5 → 6 → 7
 
 user可以再中间任何时刻增加block
 

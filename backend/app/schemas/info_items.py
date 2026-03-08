@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -16,6 +17,24 @@ class AlertUpsertIn(BaseModel):
     dismiss_reason: str | None = None
 
 
+class InfoItemDraftIn(BaseModel):
+    title: str = Field(min_length=1)
+    content: str = Field(min_length=1)
+    source_url: str | None = None
+    published_at: datetime | None = None
+    importance_score: int = Field(ge=1, le=5)
+    is_new_tech: bool = False
+    comment: str | None = None
+    source_types: list[str] = Field(default_factory=list)
+    info_types: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    domain_ids: list[str] = Field(min_length=1)
+    classification: str | None = None
+    status: str = "draft"
+    draft_data: dict[str, Any] = Field(default_factory=dict)
+    alert: AlertUpsertIn | None = None
+
+
 class InfoItemPublishIn(BaseModel):
     title: str = Field(min_length=1)
     content: str = Field(min_length=1)
@@ -29,6 +48,7 @@ class InfoItemPublishIn(BaseModel):
     tags: list[str] = Field(default_factory=list)
     domain_ids: list[str] = Field(min_length=1)
     classification: str | None = None
+    draft_id: UUID | None = None
     alert: AlertUpsertIn | None = None
 
 
@@ -49,6 +69,7 @@ class InfoItemOut(BaseModel):
     tags: list[str]
     domain_ids: list[str]
     classification: str | None
+    draft_data: dict[str, Any]
     alert_status: str | None
     alert_source: str | None
     alert_manual_override: bool

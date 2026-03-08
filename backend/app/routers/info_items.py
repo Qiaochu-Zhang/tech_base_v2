@@ -9,9 +9,12 @@ from sqlalchemy.orm import Session, selectinload
 from app.db.session import get_db
 from app.models.domain import Domain
 from app.models.info_item import InfoItem, InfoItemDomain
-from app.schemas import AlertUpsertIn, InfoItemOut, InfoItemPublishIn
+from app.schemas import AlertUpsertIn, InfoItemDraftIn, InfoItemOut, InfoItemPublishIn
 
 router = APIRouter(tags=["info-items"])
+
+
+DRAFT_STATUSES = {"draft", "ai_suggested"}
 
 
 def _to_info_item_out(item: InfoItem) -> InfoItemOut:
@@ -32,6 +35,7 @@ def _to_info_item_out(item: InfoItem) -> InfoItemOut:
         tags=item.tags or [],
         domain_ids=[rel.domain_id for rel in item.domains],
         classification=item.classification,
+        draft_data=item.draft_data or {},
         alert_status=item.alert_status,
         alert_source=item.alert_source,
         alert_manual_override=item.alert_manual_override,
@@ -75,18 +79,72 @@ def _apply_alert_payload(item: InfoItem, alert: AlertUpsertIn | None) -> None:
     item.alert_dismiss_reason = None
 
 
+def _validate_domain_ids(db: Session, domain_ids: list[str]) -> list[str]:
+    if not domain_ids:
+        raise HTTPException(status_code=400, detail="domain_ids is required")
+    unique_ids = list(dict.fromkeys(domain_ids))
+    existing_domain_ids = set(
+        db.scalars(select(Domain.id).where(Domain.id.in_(unique_ids))).all()
+    )
+    if len(existing_domain_ids) != len(unique_ids):
+        raise HTTPException(status_code=400, detail="some domain_ids do not exist")
+    return unique_ids
+
+
+def _replace_domains(db: Session, item: InfoItem, domain_ids: list[str]) -> None:
+    db.query(InfoItemDomain).filter(InfoItemDomain.info_item_id == item.id).delete(synchronize_session=False)
+    for idx, domain_id in enumerate(domain_ids):
+        db.add(
+            InfoItemDomain(
+                info_item_id=item.id,
+                domain_id=domain_id,
+                is_primary=(idx == 0),
+            )
+        )
+
+
+def _apply_upsert_fields(item: InfoItem, payload: InfoItemDraftIn | InfoItemPublishIn) -> None:
+    item.title = payload.title
+    item.content = payload.content
+    item.source_url = payload.source_url
+    item.published_at = payload.published_at
+    item.importance_score = payload.importance_score
+    item.is_new_tech = payload.is_new_tech
+    item.comment = payload.comment
+    item.source_types = payload.source_types
+    item.info_types = payload.info_types
+    item.tags = payload.tags
+    item.classification = payload.classification
+
+
 @router.get("/info-items", response_model=list[InfoItemOut])
 def get_info_items(
     status_filter: str = Query("published", alias="status"),
     db: Session = Depends(get_db),
 ) -> list[InfoItemOut]:
+    statuses = [s.strip() for s in status_filter.split(",") if s.strip()]
+    if not statuses:
+        statuses = ["published"]
+
     stmt: Select[tuple[InfoItem]] = (
         select(InfoItem)
         .options(selectinload(InfoItem.domains))
-        .where(InfoItem.status == status_filter)
+        .where(InfoItem.status.in_(statuses))
         .order_by(InfoItem.published_at.desc().nullslast(), InfoItem.created_at.desc())
     )
 
+    items = db.scalars(stmt).all()
+    return [_to_info_item_out(item) for item in items]
+
+
+@router.get("/info-items/drafts", response_model=list[InfoItemOut])
+def get_drafts(db: Session = Depends(get_db)) -> list[InfoItemOut]:
+    stmt: Select[tuple[InfoItem]] = (
+        select(InfoItem)
+        .options(selectinload(InfoItem.domains))
+        .where(InfoItem.status.in_(DRAFT_STATUSES))
+        .order_by(InfoItem.updated_at.desc())
+    )
     items = db.scalars(stmt).all()
     return [_to_info_item_out(item) for item in items]
 
@@ -104,6 +162,19 @@ def get_info_item(item_id: UUID, db: Session = Depends(get_db)) -> InfoItemOut:
     return _to_info_item_out(item)
 
 
+@router.get("/info-items/{item_id}/draft", response_model=InfoItemOut)
+def get_draft(item_id: UUID, db: Session = Depends(get_db)) -> InfoItemOut:
+    stmt: Select[tuple[InfoItem]] = (
+        select(InfoItem)
+        .options(selectinload(InfoItem.domains))
+        .where(InfoItem.id == item_id)
+    )
+    item = db.scalars(stmt).first()
+    if not item or item.status not in DRAFT_STATUSES:
+        raise HTTPException(status_code=404, detail="draft not found")
+    return _to_info_item_out(item)
+
+
 @router.delete("/info-items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_info_item(item_id: UUID, db: Session = Depends(get_db)) -> Response:
     item = db.get(InfoItem, item_id)
@@ -114,47 +185,79 @@ def delete_info_item(item_id: UUID, db: Session = Depends(get_db)) -> Response:
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.post("/info-items/draft", response_model=InfoItemOut, status_code=status.HTTP_201_CREATED)
+def create_draft(payload: InfoItemDraftIn, db: Session = Depends(get_db)) -> InfoItemOut:
+    if payload.status not in DRAFT_STATUSES:
+        raise HTTPException(status_code=400, detail="draft status must be draft or ai_suggested")
+    domain_ids = _validate_domain_ids(db, payload.domain_ids)
+
+    item = InfoItem(status=payload.status)
+    _apply_upsert_fields(item, payload)
+    item.draft_data = payload.draft_data or {}
+    _apply_alert_payload(item, payload.alert)
+
+    db.add(item)
+    db.flush()
+    _replace_domains(db, item, domain_ids)
+    db.commit()
+    db.refresh(item)
+    return _to_info_item_out(item)
+
+
+@router.put("/info-items/{item_id}/draft", response_model=InfoItemOut)
+def update_draft(item_id: UUID, payload: InfoItemDraftIn, db: Session = Depends(get_db)) -> InfoItemOut:
+    if payload.status not in DRAFT_STATUSES:
+        raise HTTPException(status_code=400, detail="draft status must be draft or ai_suggested")
+    stmt: Select[tuple[InfoItem]] = (
+        select(InfoItem)
+        .options(selectinload(InfoItem.domains))
+        .where(InfoItem.id == item_id)
+    )
+    item = db.scalars(stmt).first()
+    if not item or item.status not in DRAFT_STATUSES:
+        raise HTTPException(status_code=404, detail="draft not found")
+
+    domain_ids = _validate_domain_ids(db, payload.domain_ids)
+    _apply_upsert_fields(item, payload)
+    item.status = payload.status
+    item.draft_data = payload.draft_data or {}
+    _apply_alert_payload(item, payload.alert)
+    _replace_domains(db, item, domain_ids)
+
+    db.commit()
+    db.refresh(item)
+    return _to_info_item_out(item)
+
+
 @router.post(
     "/info-items/publish",
     response_model=InfoItemOut,
     status_code=status.HTTP_201_CREATED,
 )
 def publish_info_item(payload: InfoItemPublishIn, db: Session = Depends(get_db)) -> InfoItemOut:
-    if not payload.domain_ids:
-        raise HTTPException(status_code=400, detail="domain_ids is required")
-    domain_ids = list(dict.fromkeys(payload.domain_ids))
-    existing_domain_ids = set(
-        db.scalars(select(Domain.id).where(Domain.id.in_(domain_ids))).all()
-    )
-    if len(existing_domain_ids) != len(domain_ids):
-        raise HTTPException(status_code=400, detail="some domain_ids do not exist")
+    domain_ids = _validate_domain_ids(db, payload.domain_ids)
 
-    item = InfoItem(
-        title=payload.title,
-        content=payload.content,
-        source_url=payload.source_url,
-        published_at=payload.published_at,
-        status="published",
-        importance_score=payload.importance_score,
-        is_new_tech=payload.is_new_tech,
-        comment=payload.comment,
-        source_types=payload.source_types,
-        info_types=payload.info_types,
-        tags=payload.tags,
-        classification=payload.classification,
-    )
-    _apply_alert_payload(item, payload.alert)
-    db.add(item)
-    db.flush()
-
-    for idx, domain_id in enumerate(domain_ids):
-        db.add(
-            InfoItemDomain(
-                info_item_id=item.id,
-                domain_id=domain_id,
-                is_primary=(idx == 0),
-            )
+    item: InfoItem | None = None
+    if payload.draft_id:
+        stmt: Select[tuple[InfoItem]] = (
+            select(InfoItem)
+            .options(selectinload(InfoItem.domains))
+            .where(InfoItem.id == payload.draft_id)
         )
+        item = db.scalars(stmt).first()
+        if not item or item.status not in DRAFT_STATUSES:
+            raise HTTPException(status_code=404, detail="draft not found")
+
+    if item is None:
+        item = InfoItem(status="published")
+        db.add(item)
+        db.flush()
+
+    _apply_upsert_fields(item, payload)
+    item.status = "published"
+    item.draft_data = {}
+    _apply_alert_payload(item, payload.alert)
+    _replace_domains(db, item, domain_ids)
 
     db.commit()
     db.refresh(item)

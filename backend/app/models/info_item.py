@@ -34,6 +34,7 @@ class InfoItem(Base):
     info_types: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     tags: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     classification: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    draft_data: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     alert_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     alert_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
     alert_manual_override: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

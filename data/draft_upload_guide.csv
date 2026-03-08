@@ -1,0 +1,55 @@
+section,domain_cn,domain_field_en,description,indicator_name,indicator_unit
+domain_mapping,CCUS,DOM_CCUS_L1,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,捕集与分离,DOM_CCUS_CAPTURE,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,运输与储存,DOM_CCUS_TRANSPORT,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,固体吸附,DOM_CCUS_CAPTURE_SOLID,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,集群与管网,DOM_CCUS_TRANSPORT_CLUSTER_L3,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,固体胺/多孔吸附剂,DOM_CCUS_CAPTURE_SOLID_SORBENT,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,CO₂管网与集中站,DOM_CCUS_TRANSPORT_CLUSTER,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,电池与储能,DOM_L1_BATTERY,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,锂电体系,DOM_L2_BAT_LIION,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,界面与SEI,DOM_L3_BAT_SEI,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,电解液添加剂与成膜,DOM_L4_BAT_SEI_ADD,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,正极材料,DOM_L3_BAT_CATHODE,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,LFP体系与掺杂包覆,DOM_L4_BAT_CATHODE_LFP,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,高镍NCM与单晶路线,DOM_L4_BAT_CATHODE_NCM,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,固态电池,DOM_L2_BAT_SOLID,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,固态电解质,DOM_L3_SOLID_ELEC,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,硫化物电解质与界面稳定,DOM_L4_SOLID_SULFIDE,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,氧化物电解质与致密化工艺,DOM_L4_SOLID_OXIDE,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,氢能与合成燃料,DOM_L1_H2,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,电解制氢,DOM_L2_H2_ELEC,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,PEM电解,DOM_L3_H2_PEM,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,低铱催化剂与膜电极寿命,DOM_L4_H2_PEM_IR,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,碱性电解(AEL),DOM_L3_H2_AEL,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,大电流密度堆叠与隔膜,DOM_L4_H2_AEL_STACK,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,可再生与电力系统,DOM_L1_RENEW,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,电网与储能调度,DOM_L2_RENEW_GRID,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,灵活性资源与需求响应,DOM_L3_GRID_FLEX,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,虚拟电厂VPP与聚合控制,DOM_L4_GRID_VPP,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,低碳材料与过程,DOM_L1_MATERIALS,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,水泥与建材脱碳,DOM_L2_MAT_CEMENT,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,替代胶凝材料,DOM_L3_CEMENT_ALT,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,镁基矿化与CO₂固化建材,DOM_L4_CEMENT_MG,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,政策与碳市场,DOM_L1_POLICY,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,碳市场与MRV,DOM_L2_POLICY_MARKET,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,核算/核证与方法学,DOM_L3_MRV,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,CCUS项目MRV与信用方法学,DOM_L4_MRV_CCS,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+indicator_preset,CCUS,DOM_CCUS_L1,当前预设指标（全域可用）,工作容量,mmol_CO2/g
+indicator_preset,CCUS,DOM_CCUS_L1,当前预设指标（全域可用）,再生能耗,GJ/tCO2
+indicator_preset,CCUS,DOM_CCUS_L1,当前预设指标（全域可用）,循环稳定性,% retention @ N cycles
+indicator_preset,电池与储能,DOM_L1_BATTERY,当前预设指标（全域可用）,工作容量,mmol_CO2/g
+indicator_preset,电池与储能,DOM_L1_BATTERY,当前预设指标（全域可用）,再生能耗,GJ/tCO2
+indicator_preset,电池与储能,DOM_L1_BATTERY,当前预设指标（全域可用）,循环稳定性,% retention @ N cycles
+indicator_preset,氢能与合成燃料,DOM_L1_H2,当前预设指标（全域可用）,工作容量,mmol_CO2/g
+indicator_preset,氢能与合成燃料,DOM_L1_H2,当前预设指标（全域可用）,再生能耗,GJ/tCO2
+indicator_preset,氢能与合成燃料,DOM_L1_H2,当前预设指标（全域可用）,循环稳定性,% retention @ N cycles
+indicator_preset,可再生与电力系统,DOM_L1_RENEW,当前预设指标（全域可用）,工作容量,mmol_CO2/g
+indicator_preset,可再生与电力系统,DOM_L1_RENEW,当前预设指标（全域可用）,再生能耗,GJ/tCO2
+indicator_preset,可再生与电力系统,DOM_L1_RENEW,当前预设指标（全域可用）,循环稳定性,% retention @ N cycles
+indicator_preset,低碳材料与过程,DOM_L1_MATERIALS,当前预设指标（全域可用）,工作容量,mmol_CO2/g
+indicator_preset,低碳材料与过程,DOM_L1_MATERIALS,当前预设指标（全域可用）,再生能耗,GJ/tCO2
+indicator_preset,低碳材料与过程,DOM_L1_MATERIALS,当前预设指标（全域可用）,循环稳定性,% retention @ N cycles
+indicator_preset,政策与碳市场,DOM_L1_POLICY,当前预设指标（全域可用）,工作容量,mmol_CO2/g
+indicator_preset,政策与碳市场,DOM_L1_POLICY,当前预设指标（全域可用）,再生能耗,GJ/tCO2
+indicator_preset,政策与碳市场,DOM_L1_POLICY,当前预设指标（全域可用）,循环稳定性,% retention @ N cycles

@@ -82,7 +82,7 @@
 <div class="container">
   <section class="card">
     <div class="hd">
-      <div style="font-weight:750;">本地草稿列表</div>
+      <div style="font-weight:750;">草稿列表</div>
       <a class="btn" href="upload_review.html">新建草稿</a>
     </div>
     <div class="bd">
@@ -107,11 +107,24 @@
 </div>
 
 <script>
-  const draftKey = "drafts";
+  const API_BASE = window.API_BASE || "http://127.0.0.1:8000/api";
   const $ = s => document.querySelector(s);
 
-  function render(){
-    const list = JSON.parse(localStorage.getItem(draftKey) || "[]");
+  async function loadApi(path, options = {}){
+    const r = await fetch(`${API_BASE}${path}`, {
+      cache: "no-store",
+      ...options
+    });
+    if(!r.ok){
+      const text = await r.text();
+      throw new Error(`API请求失败 (${r.status}) ${text}`);
+    }
+    if(r.status === 204) return null;
+    return await r.json();
+  }
+
+  async function render(){
+    const list = await loadApi("/info-items/drafts");
     const tbody = $("#draftBody");
     tbody.innerHTML = "";
     if(list.length === 0){
@@ -124,7 +137,7 @@
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${draft.title || "-"}</td>
-        <td>${draft.published_at || "-"}</td>
+        <td>${(draft.published_at || "").slice(0, 10) || "-"}</td>
         <td>${(draft.domain_ids || []).join("、") || "-"}</td>
         <td>${draft.importance_score || "-"}</td>
         <td>${draft.comment ? "有" : "无"}</td>
@@ -137,21 +150,27 @@
       `;
 
       tr.querySelector("[data-continue]").addEventListener("click", () => {
-        localStorage.setItem("currentDraft", JSON.stringify(draft));
-        location.href = "upload_review.html";
+        location.href = `upload_review.html?draft_id=${encodeURIComponent(draft.id)}`;
       });
 
-      tr.querySelector("[data-delete]").addEventListener("click", () => {
-        const filtered = list.filter(item => item.id !== draft.id);
-        localStorage.setItem(draftKey, JSON.stringify(filtered));
-        render();
+      tr.querySelector("[data-delete]").addEventListener("click", async () => {
+        try{
+          await loadApi(`/info-items/${encodeURIComponent(draft.id)}`, { method: "DELETE" });
+          await render();
+        }catch(err){
+          alert(err?.message || "删除失败");
+        }
       });
 
       tbody.appendChild(tr);
     });
   }
 
-  render();
+  render().catch(err => {
+    console.error(err);
+    $("#emptyBox").style.display = "block";
+    $("#emptyBox").textContent = "草稿加载失败，请检查后端服务";
+  });
 </script>
 </body>
 </html>
