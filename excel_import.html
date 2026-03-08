@@ -172,10 +172,8 @@
         cell = "";
         continue;
       }
-      if((ch === "
-" || ch === "") && !inQuotes){
-        if(ch === "" && next === "
-") i++;
+      if((ch === "\n" || ch === "\r") && !inQuotes){
+        if(ch === "\r" && next === "\n") i++;
         row.push(cell);
         rows.push(row);
         row = [];
