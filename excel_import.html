@@ -215,20 +215,60 @@
     return text;
   }
 
+  function pad2(n){
+    return String(n).padStart(2, "0");
+  }
+
+  function normalizeDateValue(value){
+    if(value instanceof Date && Number.isFinite(value.getTime())){
+      const y = value.getFullYear();
+      const m = pad2(value.getMonth() + 1);
+      const d = pad2(value.getDate());
+      return `${y}-${m}-${d}`;
+    }
+    const raw = String(value ?? "").trim();
+    if(!raw) return "";
+
+    if(/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(raw)){
+      const [y, m, d] = raw.split(/[-/.]/).map(Number);
+      return `${y}-${pad2(m)}-${pad2(d)}`;
+    }
+
+    if(/^\d+(\.\d+)?$/.test(raw)){
+      const serial = Number(raw);
+      if(Number.isFinite(serial) && serial > 20000 && serial < 90000){
+        const utc = new Date(Math.round((serial - 25569) * 86400 * 1000));
+        const y = utc.getUTCFullYear();
+        const m = pad2(utc.getUTCMonth() + 1);
+        const d = pad2(utc.getUTCDate());
+        return `${y}-${m}-${d}`;
+      }
+    }
+
+    return raw;
+  }
+
+  function normalizeRow(rawRow){
+    const row = { ...rawRow };
+    row.published_at = normalizeDateValue(row.published_at);
+    return row;
+  }
+
   async function readXlsxRows(file){
     const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: "array" });
+    const wb = XLSX.read(buf, { type: "array", cellDates: true });
     const sheetName = wb.SheetNames[0];
     if(!sheetName){
       return [];
     }
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: "" });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: "", raw: false, dateNF: "yyyy-mm-dd" });
     return rows.map(row => {
       const normalized = {};
       Object.keys(row).forEach(key => {
-        normalized[String(key).trim()] = String(row[key] ?? "").trim();
+        const rawValue = row[key];
+        normalized[String(key).trim()] = rawValue instanceof Date ? normalizeDateValue(rawValue) : String(rawValue ?? "").trim();
       });
-      return normalized;
+      return normalizeRow(normalized);
     });
   }
 
@@ -244,11 +284,12 @@
   }
 
   function parseBool(v){
-    return String(v).trim().toLowerCase() === "true";
+    const val = String(v).trim().toLowerCase();
+    return val === "true" || val === "1" || val === "yes" || val === "y" || val === "是";
   }
 
   function parseList(v){
-    return String(v || "").split(";").map(s => s.trim()).filter(Boolean);
+    return String(v || "").split(/[;；,，]/).map(s => s.trim()).filter(Boolean);
   }
 
   function durationToExpiresAt(duration){
@@ -278,10 +319,16 @@
   }
 
   function validate(row, mode){
-    const required = ["title", "published_at", "source_url", "source_types", "info_types", "domains", "importance_score", "is_new_tech", "content"];
+    const required = mode === "publish"
+      ? ["title", "content", "domains"]
+      : ["title", "content", "domains"];
     const missing = required.filter(key => !row[key]);
     if(missing.length){
       return `缺少字段：${missing.join("、")}`;
+    }
+    const importance = Number(row.importance_score || 3);
+    if(!Number.isFinite(importance) || importance < 1 || importance > 5){
+      return "importance_score 必须是 1-5";
     }
     if(parseBool(row.alert_manual)){
       const alertRequired = ["alert_title", "alert_body", "reviewer_comment", "duration", "alert_color"];
@@ -397,7 +444,7 @@
         previewRows = await readXlsxRows(file);
       }else{
         const text = await readCsvText(file);
-        previewRows = parseCSV(text);
+        previewRows = parseCSV(text).map(normalizeRow);
       }
       renderPreview();
     }catch(err){
@@ -416,7 +463,7 @@
 
     let errorCount = 0;
     previewRows.forEach(row => {
-      const error = validate(row);
+      const error = validate(row, "draft");
       if(error) errorCount++;
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -446,16 +493,20 @@
     }
     let ok = 0;
     let fail = 0;
+    const errors = [];
     for(const row of previewRows){
       try{
         await createDraftRow(row);
         ok++;
-      }catch{
+      }catch(err){
         fail++;
+        if(errors.length < 3){
+          errors.push(err?.message || "未知错误");
+        }
       }
     }
     if(fail){
-      alert(`批量生成草稿完成：成功 ${ok} 条，失败 ${fail} 条。`);
+      alert(`批量生成草稿完成：成功 ${ok} 条，失败 ${fail} 条。\n${errors.join("\n")}`);
     }else{
       alert(`已批量生成草稿，共 ${ok} 条。`);
     }
@@ -473,16 +524,20 @@
     }
     let ok = 0;
     let fail = 0;
+    const errors = [];
     for(const row of previewRows){
       try{
         await publishRow(row);
         ok++;
-      }catch{
+      }catch(err){
         fail++;
+        if(errors.length < 3){
+          errors.push(err?.message || "未知错误");
+        }
       }
     }
     if(fail){
-      alert(`批量发布完成：成功 ${ok} 条，失败 ${fail} 条。`);
+      alert(`批量发布完成：成功 ${ok} 条，失败 ${fail} 条。\n${errors.join("\n")}`);
     }else{
       alert(`批量发布成功，共 ${ok} 条。`);
     }

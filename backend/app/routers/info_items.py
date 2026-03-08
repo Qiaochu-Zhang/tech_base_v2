@@ -251,9 +251,11 @@ def publish_info_item(payload: InfoItemPublishIn, db: Session = Depends(get_db))
     if item is None:
         item = InfoItem(status="published")
         db.add(item)
-        db.flush()
 
     _apply_upsert_fields(item, payload)
+    # For non-draft publish, required fields must be assigned before first flush/insert.
+    if payload.draft_id is None:
+        db.flush()
     item.status = "published"
     item.draft_data = {}
     _apply_alert_payload(item, payload.alert)

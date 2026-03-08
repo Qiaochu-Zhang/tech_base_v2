@@ -274,7 +274,7 @@
 
 ### 本地验证结果（2026-03-08）
 - `docker compose up -d --build` 启动通过（api + db）。
-- `docker compose run --rm api pytest -q` 通过（`4 passed`）。
+- `docker compose run --rm api pytest -q` 通过（`5 passed`）。
 - 接口联调通过：
   - `GET /api/health` -> 200
   - `POST /api/info-items/draft` -> 201
@@ -282,6 +282,19 @@
   - `GET /api/info-items/{id}/draft` -> 200
   - `POST /api/info-items/publish`（带 `draft_id`）-> 201
   - `PATCH /api/info-items/{id}/alert` -> 200
+
+### Block 7 补充现状（2026-03-08 晚间）
+- 已修复批量“直接发布”路径 500 问题（非 `draft_id` 发布时的 `flush` 顺序错误）：
+  - 文件：`backend/app/routers/info_items.py`
+- `excel_import.html` 批量导入宽容性已增强：
+  - `.xlsx` 日期归一化（含 Excel 序列号）；
+  - 多分隔符支持（`;`/`；`/`,`/`，`）；
+  - 布尔值兼容（`true/1/yes/y/是`）；
+  - 批量失败回显具体错误。
+- 容器内集成验证补充通过：
+  - 模拟 xlsx 批量生成草稿：2/2 成功；
+  - 模拟 xlsx 批量直接发布：2/2 成功；
+  - `/api/health` 返回 `{"status":"ok"}`。
 
 ---
 
